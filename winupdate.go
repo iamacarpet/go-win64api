@@ -49,5 +49,9 @@ func UpdatesPending() (bool, int, error) {
     }
     updnn := int(updn.Val)
 
-    return true, updnn, nil
+    pending := false
+    if updnn > 0 {
+        pending = true
+    }
+    return pending, updnn, nil
 }
