@@ -85,8 +85,8 @@ func ListLoggedInUsers() ([]SessionDetails, error) {
                     if LsatoString(data.LogonDomain) != "Window Manager" {
                         sUser := fmt.Sprintf("%s\\%s", LsatoString(data.LogonDomain), LsatoString(data.UserName))
                         sort.Strings(uList)
-	                    i := sort.Search(len(uList), func(i int) bool { return uList[i] >= sUser })
-	                    if !(i < len(uList) && uList[i] == sUser) {
+                        i := sort.Search(len(uList), func(i int) bool { return uList[i] >= sUser })
+                        if !(i < len(uList) && uList[i] == sUser) {
                             uList = append(uList, sUser)
                             ud := SessionDetails{
                                 Username: LsatoString(data.UserName),
@@ -114,5 +114,5 @@ func ListLoggedInUsers() ([]SessionDetails, error) {
 }
 
 func LsatoString(p LSA_UNICODE_STRING) string {
-	return syscall.UTF16ToString((*[4096]uint16)(unsafe.Pointer(p.buffer))[:p.Length])
+    return syscall.UTF16ToString((*[4096]uint16)(unsafe.Pointer(p.buffer))[:p.Length])
 }

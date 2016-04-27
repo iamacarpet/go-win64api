@@ -447,5 +447,5 @@ func userDelFlags(username string, flags uint32) (bool, error) {
 }
 
 func UTF16toString(p *uint16) string {
-	return syscall.UTF16ToString((*[4096]uint16)(unsafe.Pointer(p))[:])
+    return syscall.UTF16ToString((*[4096]uint16)(unsafe.Pointer(p))[:])
 }
