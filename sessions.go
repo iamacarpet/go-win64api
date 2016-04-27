@@ -67,7 +67,7 @@ func ListLoggedInUsers() ([]SessionDetails, error) {
         uSessList               []SessionDetails    = make([]SessionDetails, 0)
         PidLUIDList             map[uint32]LUID
     )
-    _, PidLUIDList, err := ProcessList()
+    PidLUIDList, err := ProcessLUIDList()
     if err != nil {
         return nil, fmt.Errorf("Error getting process list, %s.", err.Error())
     }
@@ -119,6 +119,40 @@ func ListLoggedInUsers() ([]SessionDetails, error) {
     }
 
     return uSessList, nil
+}
+
+func sessUserLUIDs() (map[LUID]string, error) {
+    var (
+        logonSessionCount       uint64
+        loginSessionList        uintptr
+        sizeTest                LUID
+        uList                   map[LUID]string     = make(map[LUID]string)
+    )
+
+    _, _, _ = sessLsaEnumerateLogonSessions.Call(
+        uintptr(unsafe.Pointer(&logonSessionCount)),
+        uintptr(unsafe.Pointer(&loginSessionList)),
+    )
+    defer sessLsaFreeReturnBuffer.Call(uintptr(unsafe.Pointer(&loginSessionList)))
+
+    var iter uintptr = uintptr(unsafe.Pointer(loginSessionList))
+
+    for i := uint64(0); i < logonSessionCount; i++ {
+        var sessionData uintptr
+        _, _, _ = sessLsaGetLogonSessionData.Call(uintptr(iter), uintptr(unsafe.Pointer(&sessionData)))
+        if sessionData != uintptr(0){
+            var data *SECURITY_LOGON_SESSION_DATA = (*SECURITY_LOGON_SESSION_DATA)(unsafe.Pointer(sessionData))
+
+            if data.Sid != uintptr(0) {
+                uList[data.LogonId] = fmt.Sprintf("%s\\%s", strings.ToUpper(LsatoString(data.LogonDomain)), strings.ToLower(LsatoString(data.UserName)))
+            }
+        }
+
+        iter = uintptr(unsafe.Pointer(iter + unsafe.Sizeof(sizeTest)))
+        _, _, _ = sessLsaFreeReturnBuffer.Call(uintptr(unsafe.Pointer(sessionData)))
+    }
+
+    return uList, nil
 }
 
 func luidinmap(needle *LUID, haystack *map[uint32]LUID) (bool) {

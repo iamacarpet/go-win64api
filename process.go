@@ -4,6 +4,7 @@ import (
     "fmt"
     "syscall"
     "unsafe"
+    "reflect"
 )
 
 // Windows API functions
@@ -98,7 +99,7 @@ type Process struct {
     Username            string          `json:"user"`
 }
 
-func newProcessData(e *PROCESSENTRY32, path string) *Process {
+func newProcessData(e *PROCESSENTRY32, path string, user string) *Process {
     // Find when the string ends for decoding
     end := 0
     for {
@@ -113,18 +114,66 @@ func newProcessData(e *PROCESSENTRY32, path string) *Process {
         Ppid:       int(e.ParentProcessID),
         Executable: syscall.UTF16ToString(e.ExeFile[:end]),
         Fullpath:   path,
+        Username:   user,
     }
 }
 
-func ProcessList() ([]*Process, map[uint32]LUID, error) {
+func ProcessList() ([]*Process, error) {
     err := procAssignCorrectPrivs()
     if err != nil {
-        return nil, nil, fmt.Errorf("Error assigning privs... %s", err.Error())
+        return nil, fmt.Errorf("Error assigning privs... %s", err.Error())
+    }
+
+    lList, err := sessUserLUIDs()
+    if err != nil {
+        return nil, fmt.Errorf("Error getting LUIDs... %s", err.Error())
     }
 
     handle, _, _ := procCreateToolhelp32Snapshot.Call(0x00000002, 0)
     if handle < 0 {
-        return nil, nil, syscall.GetLastError()
+        return nil, syscall.GetLastError()
+    }
+    defer procCloseHandle.Call(handle)
+
+    var entry PROCESSENTRY32
+    entry.Size = uint32(unsafe.Sizeof(entry))
+    ret, _, _ := procProcess32First.Call(handle, uintptr(unsafe.Pointer(&entry)))
+    if ret == 0 {
+        return nil, fmt.Errorf("Error retrieving process info.")
+    }
+
+    results := make([]*Process, 0)
+    for {
+        path, ll, _ := getProcessFullPathAndLUID(entry.ProcessID)
+
+        var user string
+        for k, l := range lList {
+            if reflect.DeepEqual(k, ll) {
+                user = l
+                break
+            }
+        }
+
+        results = append(results, newProcessData(&entry, path, user))
+
+        ret, _, _ := procProcess32Next.Call(handle, uintptr(unsafe.Pointer(&entry)))
+        if ret == 0 {
+            break
+        }
+    }
+
+    return results, nil
+}
+
+func ProcessLUIDList() (map[uint32]LUID, error) {
+    err := procAssignCorrectPrivs()
+    if err != nil {
+        return nil, fmt.Errorf("Error assigning privs... %s", err.Error())
+    }
+
+    handle, _, _ := procCreateToolhelp32Snapshot.Call(0x00000002, 0)
+    if handle < 0 {
+        return nil, syscall.GetLastError()
     }
     defer procCloseHandle.Call(handle)
 
@@ -134,13 +183,12 @@ func ProcessList() ([]*Process, map[uint32]LUID, error) {
     entry.Size = uint32(unsafe.Sizeof(entry))
     ret, _, _ := procProcess32First.Call(handle, uintptr(unsafe.Pointer(&entry)))
     if ret == 0 {
-        return nil, nil, fmt.Errorf("Error retrieving process info.")
+        return nil, fmt.Errorf("Error retrieving process info.")
     }
 
-    results := make([]*Process, 0)
     for {
-        path, ll, _ := getProcessFullPathAndUsername(entry.ProcessID)
-        results = append(results, newProcessData(&entry, path))
+        ll, _ := getProcessLUID(entry.ProcessID)
+
         pMap[entry.ProcessID] = ll
 
         ret, _, _ := procProcess32Next.Call(handle, uintptr(unsafe.Pointer(&entry)))
@@ -149,7 +197,7 @@ func ProcessList() ([]*Process, map[uint32]LUID, error) {
         }
     }
 
-    return results, pMap, nil
+    return pMap, nil
 }
 
 func procAssignCorrectPrivs() (error) {
@@ -205,7 +253,41 @@ func procAssignCorrectPrivs() (error) {
     return nil
 }
 
-func getProcessFullPathAndUsername(pid uint32) (string, LUID, error) {
+func getProcessLUID(pid uint32) (LUID, error) {
+    handle, _, _ := procOpenProcess.Call(uintptr(uint32(PROCESS_QUERY_INFORMATION)), uintptr(0), uintptr(pid))
+    if handle < 0 {
+        return LUID{}, syscall.GetLastError()
+    }
+    defer procCloseHandle.Call(handle)
+
+    var tHandle uintptr
+    opRes, _, _ := procOpenProcessToken.Call(
+        uintptr(handle),
+        uintptr(uint32(PROC_TOKEN_QUERY)),
+        uintptr(unsafe.Pointer(&tHandle)),
+    )
+    if opRes != 1 {
+        return LUID{}, fmt.Errorf("Unable to open process token.")
+    }
+    defer procCloseHandle.Call(tHandle)
+
+    var sData   TOKEN_STATISTICS
+    var sLength uint32
+    tsRes, _, _ := procGetTokenInformation.Call(
+        uintptr(tHandle),
+        uintptr(uint32(10)), // TOKEN_STATISTICS
+        uintptr(unsafe.Pointer(&sData)),
+        uintptr(uint32(unsafe.Sizeof(sData))),
+        uintptr(unsafe.Pointer(&sLength)),
+    )
+    if tsRes != 1 {
+        return LUID{}, fmt.Errorf("Error fetching token information (LUID).")
+    }
+
+    return sData.AuthenticationId, nil
+}
+
+func getProcessFullPathAndLUID(pid uint32) (string, LUID, error) {
     var fullpath string
 
     handle, _, _ := procOpenProcess.Call(uintptr(uint32(PROCESS_QUERY_INFORMATION)), uintptr(0), uintptr(pid))
