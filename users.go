@@ -1,6 +1,7 @@
 package winapi
 
 import (
+    "os"
     "fmt"
     "time"
     "syscall"
@@ -13,6 +14,8 @@ var (
     usrNetUserGetInfo                       = modNetapi32.NewProc("NetUserGetInfo")
     usrNetUserEnum                          = modNetapi32.NewProc("NetUserEnum")
     usrNetUserSetInfo                       = modNetapi32.NewProc("NetUserSetInfo")
+    usrNetLocalGroupAddMembers              = modNetapi32.NewProc("NetLocalGroupAddMembers")
+    usrNetLocalGroupDelMembers              = modNetapi32.NewProc("NetLocalGroupDelMembers")
 )
 
 const (
@@ -90,12 +93,12 @@ type USER_INFO_1003 struct {
     Usri1003_password       *uint16
 }
 
-type USER_INFO_1005 struct {
-    Usri1005_priv           uint32
-}
-
 type USER_INFO_1008 struct {
     Usri1008_flags          uint32
+}
+
+type LOCALGROUP_MEMBERS_INFO_3 struct {
+    Lgrmi3_domainandname    *uint16
 }
 
 type LocalUser struct {
@@ -203,17 +206,25 @@ func ListLocalUsers() ([]LocalUser, error) {
 }
 
 func SetAdmin(username string) (bool, error) {
-    var errParam uint32
-    uPointer, err := syscall.UTF16PtrFromString(username)
+    hn, _ := os.Hostname()
+    uPointer, err := syscall.UTF16PtrFromString(hn + `\` + username)
     if err != nil {
         return false, fmt.Errorf("Unable to encode username to UTF16")
     }
-    ret, _, _ := usrNetUserSetInfo.Call(
+    gPointer, err := syscall.UTF16PtrFromString("Administrators")
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode group name to UTF16")
+    }
+    var uArray []LOCALGROUP_MEMBERS_INFO_3 = make([]LOCALGROUP_MEMBERS_INFO_3, 1)
+    uArray[0] = LOCALGROUP_MEMBERS_INFO_3{
+        Lgrmi3_domainandname: uPointer,
+    }
+    ret, _, _ := usrNetLocalGroupAddMembers.Call(
         uintptr(0), // servername
-        uintptr(unsafe.Pointer(uPointer)), // username
-        uintptr(uint32(1005)), // level
-        uintptr(unsafe.Pointer(&USER_INFO_1005{ Usri1005_priv: USER_PRIV_ADMIN })),
-        uintptr(unsafe.Pointer(&errParam)),
+        uintptr(unsafe.Pointer(gPointer)), // group name
+        uintptr(uint32(3)), // level
+        uintptr(unsafe.Pointer(&uArray[0])), // user array.
+        uintptr(uint32(len(uArray))),
     )
     if ret != NET_API_STATUS_NERR_Success {
         return false, fmt.Errorf("Unable to process. %d", ret)
@@ -222,17 +233,25 @@ func SetAdmin(username string) (bool, error) {
 }
 
 func RevokeAdmin(username string) (bool, error) {
-    var errParam uint32
-    uPointer, err := syscall.UTF16PtrFromString(username)
+    hn, _ := os.Hostname()
+    uPointer, err := syscall.UTF16PtrFromString(hn + `\` + username)
     if err != nil {
         return false, fmt.Errorf("Unable to encode username to UTF16")
     }
-    ret, _, _ := usrNetUserSetInfo.Call(
+    gPointer, err := syscall.UTF16PtrFromString("Administrators")
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode group name to UTF16")
+    }
+    var uArray []LOCALGROUP_MEMBERS_INFO_3 = make([]LOCALGROUP_MEMBERS_INFO_3, 1)
+    uArray[0] = LOCALGROUP_MEMBERS_INFO_3{
+        Lgrmi3_domainandname: uPointer,
+    }
+    ret, _, _ := usrNetLocalGroupDelMembers.Call(
         uintptr(0), // servername
-        uintptr(unsafe.Pointer(uPointer)), // username
-        uintptr(uint32(1005)), // level
-        uintptr(unsafe.Pointer(&USER_INFO_1005{ Usri1005_priv: USER_PRIV_USER })),
-        uintptr(unsafe.Pointer(&errParam)),
+        uintptr(unsafe.Pointer(gPointer)), // group name
+        uintptr(uint32(3)), // level
+        uintptr(unsafe.Pointer(&uArray[0])), // user array.
+        uintptr(uint32(len(uArray))),
     )
     if ret != NET_API_STATUS_NERR_Success {
         return false, fmt.Errorf("Unable to process. %d", ret)
