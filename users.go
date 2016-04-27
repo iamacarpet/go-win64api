@@ -10,12 +10,14 @@ import (
 
 var (
     modNetapi32                             = syscall.NewLazyDLL("netapi32.dll")
-    usrNetApiBufferFree                     = modNetapi32.NewProc("NetApiBufferFree")
-    usrNetUserGetInfo                       = modNetapi32.NewProc("NetUserGetInfo")
     usrNetUserEnum                          = modNetapi32.NewProc("NetUserEnum")
+    usrNetUserAdd                           = modNetapi32.NewProc("NetUserAdd")
+    usrNetUserDel                           = modNetapi32.NewProc("NetUserDel")
+    usrNetUserGetInfo                       = modNetapi32.NewProc("NetUserGetInfo")
     usrNetUserSetInfo                       = modNetapi32.NewProc("NetUserSetInfo")
     usrNetLocalGroupAddMembers              = modNetapi32.NewProc("NetLocalGroupAddMembers")
     usrNetLocalGroupDelMembers              = modNetapi32.NewProc("NetLocalGroupDelMembers")
+    usrNetApiBufferFree                     = modNetapi32.NewProc("NetApiBufferFree")
 )
 
 const (
@@ -45,9 +47,11 @@ const (
     USER_FILTER_NORMAL_ACCOUNT                          = 0x0002
     USER_MAX_PREFERRED_LENGTH                           = 0xFFFFFFFF
 
+    USER_UF_SCRIPT                                      = 1
     USER_UF_ACCOUNTDISABLE                              = 2
     USER_UF_LOCKOUT                                     = 16
     USER_UF_PASSWD_CANT_CHANGE                          = 64
+    USER_UF_NORMAL_ACCOUNT                              = 512
     USER_UF_DONT_EXPIRE_PASSWD                          = 65536
 )
 
@@ -97,6 +101,10 @@ type USER_INFO_1008 struct {
     Usri1008_flags          uint32
 }
 
+type USER_INFO_1011 struct {
+    Usri1011_full_name      *uint16
+}
+
 type LOCALGROUP_MEMBERS_INFO_3 struct {
     Lgrmi3_domainandname    *uint16
 }
@@ -113,6 +121,54 @@ type LocalUser struct {
     LastLogon               time.Time
     BadPasswordCount        uint32
     NumberOfLogons          uint32
+}
+
+func UserAdd(username string, fullname string, password string) (bool, error) {
+    var parmErr uint32
+    uPointer, err := syscall.UTF16PtrFromString(username)
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode username to UTF16")
+    }
+    pPointer, err := syscall.UTF16PtrFromString(password)
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode password to UTF16")
+    }
+    uInfo := USER_INFO_1{
+        Usri1_name:         uPointer,
+        Usri1_password:     pPointer,
+        Usri1_priv:         USER_PRIV_USER,
+        Usri1_flags:        USER_UF_SCRIPT | USER_UF_NORMAL_ACCOUNT | USER_UF_DONT_EXPIRE_PASSWD,
+    }
+    ret, _, _ := usrNetUserAdd.Call(
+        uintptr(0),
+        uintptr(uint32(1)),
+        uintptr(unsafe.Pointer(&uInfo)),
+        uintptr(unsafe.Pointer(&parmErr)),
+    )
+    if ret != NET_API_STATUS_NERR_Success {
+        return false, fmt.Errorf("Unable to process. %d %d", ret, parmErr)
+    }
+    if ok, err := UserUpdateFullname(username, fullname); err != nil {
+        return false, fmt.Errorf("While setting Full Name. %s", err.Error())
+    } else if ! ok {
+        return false, fmt.Errorf("Problem while setting Full Name.")
+    }
+    return true, nil
+}
+
+func UserDelete(username string) (bool, error) {
+    uPointer, err := syscall.UTF16PtrFromString(username)
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode username to UTF16")
+    }
+    ret, _, _ := usrNetUserDel.Call(
+        uintptr(0),
+        uintptr(unsafe.Pointer(uPointer)),
+    )
+    if ret != NET_API_STATUS_NERR_Success {
+        return false, fmt.Errorf("Unable to process. %d", ret)
+    }
+    return true, nil
 }
 
 func IsLocalUserAdmin(username string) (bool, error) {
@@ -259,6 +315,29 @@ func RevokeAdmin(username string) (bool, error) {
     return true, nil
 }
 
+func UserUpdateFullname(username string, fullname string) (bool, error) {
+    var errParam uint32
+    uPointer, err := syscall.UTF16PtrFromString(username)
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode username to UTF16")
+    }
+    fPointer, err := syscall.UTF16PtrFromString(fullname)
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode full name to UTF16")
+    }
+    ret, _, _ := usrNetUserSetInfo.Call(
+        uintptr(0), // servername
+        uintptr(unsafe.Pointer(uPointer)), // username
+        uintptr(uint32(1011)), // level
+        uintptr(unsafe.Pointer(&USER_INFO_1011{ Usri1011_full_name: fPointer })),
+        uintptr(unsafe.Pointer(&errParam)),
+    )
+    if ret != NET_API_STATUS_NERR_Success {
+        return false, fmt.Errorf("Unable to process. %d", ret)
+    }
+    return true, nil
+}
+
 func ChangePassword(username string, password string) (bool, error) {
     var errParam uint32
     uPointer, err := syscall.UTF16PtrFromString(username)
@@ -280,6 +359,91 @@ func ChangePassword(username string, password string) (bool, error) {
         return false, fmt.Errorf("Unable to process. %d", ret)
     }
     return true, nil
+}
+
+func UserDisabled(username string, disable bool) (bool, error) {
+    if disable {
+        return userAddFlags(username, USER_UF_ACCOUNTDISABLE)
+    } else {
+        return userDelFlags(username, USER_UF_ACCOUNTDISABLE)
+    }
+}
+
+func UserPasswordNoExpires(username string, noexpire bool) (bool, error) {
+    if noexpire {
+        return userAddFlags(username, USER_UF_DONT_EXPIRE_PASSWD)
+    } else {
+        return userDelFlags(username, USER_UF_DONT_EXPIRE_PASSWD)
+    }
+}
+
+func UserDisablePasswordChange(username string, disabled bool) (bool, error) {
+    if disabled {
+        return userAddFlags(username, USER_UF_PASSWD_CANT_CHANGE)
+    } else {
+        return userDelFlags(username, USER_UF_PASSWD_CANT_CHANGE)
+    }
+}
+
+func userGetFlags(username string) (uint32, error) {
+    var dataPointer uintptr
+    uPointer, err := syscall.UTF16PtrFromString(username)
+    if err != nil {
+        return 0, fmt.Errorf("Unable to encode username to UTF16")
+    }
+    _, _, _ = usrNetUserGetInfo.Call(
+        uintptr(0), // servername
+        uintptr(unsafe.Pointer(uPointer)), // username
+        uintptr(uint32(1)), // level, request USER_INFO_1
+        uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
+    )
+    defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dataPointer)))
+
+    if dataPointer == uintptr(0) {
+        return 0, fmt.Errorf("Unable to get data structure.")
+    }
+
+    var data *USER_INFO_1 = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
+
+    fmt.Printf("Existing user flags: %d\r\n", data.Usri1_flags)
+    return data.Usri1_flags, nil
+}
+
+func userSetFlags(username string, flags uint32) (bool, error) {
+    var errParam uint32
+    uPointer, err := syscall.UTF16PtrFromString(username)
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode username to UTF16")
+    }
+    ret, _, _ := usrNetUserSetInfo.Call(
+        uintptr(0), // servername
+        uintptr(unsafe.Pointer(uPointer)), // username
+        uintptr(uint32(1008)), // level
+        uintptr(unsafe.Pointer(&USER_INFO_1008{ Usri1008_flags: flags })),
+        uintptr(unsafe.Pointer(&errParam)),
+    )
+    if ret != NET_API_STATUS_NERR_Success {
+        return false, fmt.Errorf("Unable to process. %d", ret)
+    }
+    return true, nil
+}
+
+func userAddFlags(username string, flags uint32) (bool, error) {
+    eFlags, err := userGetFlags(username)
+    if err != nil {
+        return false, fmt.Errorf("Error while getting existing flags, %s.", err.Error())
+    }
+    eFlags |= flags // add supplied bits to mask.
+    return userSetFlags(username, eFlags)
+}
+
+func userDelFlags(username string, flags uint32) (bool, error) {
+    eFlags, err := userGetFlags(username)
+    if err != nil {
+        return false, fmt.Errorf("Error while getting existing flags, %s.", err.Error())
+    }
+    eFlags &^= flags // clear bits we want to remove.
+    return userSetFlags(username, eFlags)
 }
 
 func UTF16toString(p *uint16) string {
