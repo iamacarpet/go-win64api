@@ -7,6 +7,7 @@ import (
     "strings"
     "syscall"
     "unsafe"
+    "reflect"
 )
 
 var (
@@ -22,7 +23,7 @@ const (
 
 type LUID struct {
     LowPart     uint32
-    HighPart    uint32
+    HighPart    int32
 }
 
 type SECURITY_LOGON_SESSION_DATA struct {
@@ -64,7 +65,12 @@ func ListLoggedInUsers() ([]SessionDetails, error) {
         sizeTest                LUID
         uList                   []string            = make([]string, 0)
         uSessList               []SessionDetails    = make([]SessionDetails, 0)
+        PidLUIDList             map[uint32]LUID
     )
+    _, PidLUIDList, err := ProcessList()
+    if err != nil {
+        return nil, fmt.Errorf("Error getting process list, %s.", err.Error())
+    }
 
     _, _, _ = sessLsaEnumerateLogonSessions.Call(
         uintptr(unsafe.Pointer(&logonSessionCount)),
@@ -83,23 +89,25 @@ func ListLoggedInUsers() ([]SessionDetails, error) {
             if data.Sid != uintptr(0) {
                 if data.LogonType == SESS_INTERACTIVE_LOGON {
                     if LsatoString(data.LogonDomain) != "Window Manager" {
-                        sUser := fmt.Sprintf("%s\\%s", LsatoString(data.LogonDomain), LsatoString(data.UserName))
+                        sUser := fmt.Sprintf("%s\\%s", strings.ToUpper(LsatoString(data.LogonDomain)), strings.ToLower(LsatoString(data.UserName)))
                         sort.Strings(uList)
                         i := sort.Search(len(uList), func(i int) bool { return uList[i] >= sUser })
                         if !(i < len(uList) && uList[i] == sUser) {
-                            uList = append(uList, sUser)
-                            ud := SessionDetails{
-                                Username: LsatoString(data.UserName),
-                                Domain: LsatoString(data.LogonDomain),
-                            }
-                            hn, _ := os.Hostname()
-                            if strings.ToUpper(ud.Domain) == strings.ToUpper(hn) {
-                                ud.LocalUser = true
-                                if isAdmin, _ := IsLocalUserAdmin(ud.Username); isAdmin {
-                                    ud.LocalAdmin = true
+                            if luidinmap(&data.LogonId, &PidLUIDList) {
+                                uList = append(uList, sUser)
+                                ud := SessionDetails{
+                                    Username: strings.ToLower(LsatoString(data.UserName)),
+                                    Domain: strings.ToUpper(LsatoString(data.LogonDomain)),
                                 }
+                                hn, _ := os.Hostname()
+                                if strings.ToUpper(ud.Domain) == strings.ToUpper(hn) {
+                                    ud.LocalUser = true
+                                    if isAdmin, _ := IsLocalUserAdmin(ud.Username); isAdmin {
+                                        ud.LocalAdmin = true
+                                    }
+                                }
+                                uSessList = append(uSessList, ud)
                             }
-                            uSessList = append(uSessList, ud)
                         }
                     }
                 }
@@ -111,6 +119,15 @@ func ListLoggedInUsers() ([]SessionDetails, error) {
     }
 
     return uSessList, nil
+}
+
+func luidinmap(needle *LUID, haystack *map[uint32]LUID) (bool) {
+    for _, l := range *haystack {
+        if reflect.DeepEqual(l, *needle) {
+            return true
+        }
+    }
+    return false
 }
 
 func LsatoString(p LSA_UNICODE_STRING) string {
