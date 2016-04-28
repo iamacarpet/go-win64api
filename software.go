@@ -4,7 +4,7 @@ import (
     "fmt"
     "golang.org/x/sys/windows/registry"
 
-    so "windows-api-test/winapi/shared"
+    so "github.com/iamacarpet/go-win64api/shared"
 )
 
 func InstalledSoftwareList() ([]*so.Software, error) {

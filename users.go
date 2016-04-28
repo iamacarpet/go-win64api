@@ -7,7 +7,7 @@ import (
     "syscall"
     "unsafe"
 
-    so "windows-api-test/winapi/shared"
+    so "github.com/iamacarpet/go-win64api/shared"
 )
 
 var (
