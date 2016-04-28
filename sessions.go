@@ -22,6 +22,8 @@ var (
 
 const (
     SESS_INTERACTIVE_LOGON              = 2
+    SESS_REMOTE_INTERACTIVE_LOGON       = 10
+    SESS_CACHED_INTERACTIVE_LOGON       = 11
 )
 
 type LUID struct {
@@ -79,7 +81,9 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
             var data *SECURITY_LOGON_SESSION_DATA = (*SECURITY_LOGON_SESSION_DATA)(unsafe.Pointer(sessionData))
 
             if data.Sid != uintptr(0) {
-                if data.LogonType == SESS_INTERACTIVE_LOGON {
+                //fmt.Printf("%s\\%s Type: %d\r\n", strings.ToUpper(LsatoString(data.LogonDomain)), strings.ToLower(LsatoString(data.UserName)), data.LogonType)
+                validTypes := []uint32{SESS_INTERACTIVE_LOGON, SESS_CACHED_INTERACTIVE_LOGON, SESS_REMOTE_INTERACTIVE_LOGON}
+                if in_array(data.LogonType, validTypes) {
                     if LsatoString(data.LogonDomain) != "Window Manager" {
                         sUser := fmt.Sprintf("%s\\%s", strings.ToUpper(LsatoString(data.LogonDomain)), strings.ToLower(LsatoString(data.UserName)))
                         sort.Strings(uList)
@@ -158,4 +162,22 @@ func luidinmap(needle *LUID, haystack *map[uint32]LUID) (bool) {
 
 func LsatoString(p LSA_UNICODE_STRING) string {
     return syscall.UTF16ToString((*[4096]uint16)(unsafe.Pointer(p.buffer))[:p.Length])
+}
+
+func in_array(val interface{}, array interface{}) (exists bool) {
+    exists = false
+
+    switch reflect.TypeOf(array).Kind() {
+    case reflect.Slice:
+        s := reflect.ValueOf(array)
+
+        for i := 0; i < s.Len(); i++ {
+            if reflect.DeepEqual(val, s.Index(i).Interface()) == true {
+                exists = true
+                return
+            }
+        }
+    }
+
+    return
 }
