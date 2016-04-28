@@ -9,11 +9,11 @@ import (
 )
 
 func InstalledSoftwareList() ([]so.Software, error) {
-    sw64, err := getSoftwareList(`SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`, "X32")
+    sw64, err := getSoftwareList(`SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall`, "X64")
     if err != nil {
         return nil, err
     }
-    sw32, err := getSoftwareList(`SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall`, "X64")
+    sw32, err := getSoftwareList(`SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall`, "X32")
     if err != nil {
         return nil, err
     }
