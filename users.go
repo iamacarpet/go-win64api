@@ -6,6 +6,8 @@ import (
     "time"
     "syscall"
     "unsafe"
+
+    so "windows-api-test/winapi/shared"
 )
 
 var (
@@ -109,20 +111,6 @@ type LOCALGROUP_MEMBERS_INFO_3 struct {
     Lgrmi3_domainandname    *uint16
 }
 
-type LocalUser struct {
-    Username                string
-    FullName                string
-    IsEnabled               bool
-    IsLocked                bool
-    IsAdmin                 bool
-    PasswordNeverExpires    bool
-    NoChangePassword        bool
-    PasswordAge             time.Duration
-    LastLogon               time.Time
-    BadPasswordCount        uint32
-    NumberOfLogons          uint32
-}
-
 func UserAdd(username string, fullname string, password string) (bool, error) {
     var parmErr uint32
     uPointer, err := syscall.UTF16PtrFromString(username)
@@ -198,14 +186,14 @@ func IsLocalUserAdmin(username string) (bool, error) {
     }
 }
 
-func ListLocalUsers() ([]LocalUser, error) {
+func ListLocalUsers() ([]so.LocalUser, error) {
     var (
         dataPointer     uintptr
         resumeHandle    uintptr
         entriesRead     uint32
         entriesTotal    uint32
         sizeTest        USER_INFO_2
-        retVal          []LocalUser     = make([]LocalUser, 0)
+        retVal          []so.LocalUser     = make([]so.LocalUser, 0)
     )
 
     ret, _, _ := usrNetUserEnum.Call(
@@ -228,7 +216,7 @@ func ListLocalUsers() ([]LocalUser, error) {
     for i := uint32(0); i < entriesRead; i++ {
         var data *USER_INFO_2 = (*USER_INFO_2)(unsafe.Pointer(iter))
 
-        ud := LocalUser{
+        ud := so.LocalUser{
             Username:           UTF16toString(data.Usri2_name),
             FullName:           UTF16toString(data.Usri2_full_name),
             PasswordAge:        (time.Duration(data.Usri2_password_age) * time.Second),

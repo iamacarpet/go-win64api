@@ -8,6 +8,8 @@ import (
     "syscall"
     "unsafe"
     "reflect"
+
+    so "windows-api-test/winapi/shared"
 )
 
 var (
@@ -47,24 +49,13 @@ type LSA_UNICODE_STRING struct {
     buffer                  uintptr
 }
 
-type SessionDetails struct {
-    Username                string
-    Domain                  string
-    LocalUser               bool
-    LocalAdmin              bool
-}
-
-func (s *SessionDetails) FullUser() (string) {
-    return fmt.Sprintf("%s\\%s", s.Domain, s.Username)
-}
-
-func ListLoggedInUsers() ([]SessionDetails, error) {
+func ListLoggedInUsers() ([]so.SessionDetails, error) {
     var (
         logonSessionCount       uint64
         loginSessionList        uintptr
         sizeTest                LUID
         uList                   []string            = make([]string, 0)
-        uSessList               []SessionDetails    = make([]SessionDetails, 0)
+        uSessList               []so.SessionDetails    = make([]so.SessionDetails, 0)
         PidLUIDList             map[uint32]LUID
     )
     PidLUIDList, err := ProcessLUIDList()
@@ -95,7 +86,7 @@ func ListLoggedInUsers() ([]SessionDetails, error) {
                         if !(i < len(uList) && uList[i] == sUser) {
                             if luidinmap(&data.LogonId, &PidLUIDList) {
                                 uList = append(uList, sUser)
-                                ud := SessionDetails{
+                                ud := so.SessionDetails{
                                     Username: strings.ToLower(LsatoString(data.UserName)),
                                     Domain: strings.ToUpper(LsatoString(data.LogonDomain)),
                                 }

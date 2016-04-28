@@ -5,6 +5,8 @@ import (
     "syscall"
     "unsafe"
     "reflect"
+
+    so "windows-api-test/winapi/shared"
 )
 
 // Windows API functions
@@ -90,16 +92,7 @@ type TOKEN_STATISTICS struct {
     ModifiedId          LUID
 }
 
-// WindowsProcess is an implementation of Process for Windows.
-type Process struct {
-    Pid                 int             `json:"pid"`
-    Ppid                int             `json:"parentpid"`
-    Executable          string          `json:"exeName"`
-    Fullpath            string          `json:"fullPath"`
-    Username            string          `json:"user"`
-}
-
-func newProcessData(e *PROCESSENTRY32, path string, user string) *Process {
+func newProcessData(e *PROCESSENTRY32, path string, user string) *so.Process {
     // Find when the string ends for decoding
     end := 0
     for {
@@ -109,7 +102,7 @@ func newProcessData(e *PROCESSENTRY32, path string, user string) *Process {
         end++
     }
 
-    return &Process{
+    return &so.Process{
         Pid:        int(e.ProcessID),
         Ppid:       int(e.ParentProcessID),
         Executable: syscall.UTF16ToString(e.ExeFile[:end]),
@@ -118,7 +111,7 @@ func newProcessData(e *PROCESSENTRY32, path string, user string) *Process {
     }
 }
 
-func ProcessList() ([]*Process, error) {
+func ProcessList() ([]*so.Process, error) {
     err := procAssignCorrectPrivs()
     if err != nil {
         return nil, fmt.Errorf("Error assigning privs... %s", err.Error())
@@ -142,7 +135,7 @@ func ProcessList() ([]*Process, error) {
         return nil, fmt.Errorf("Error retrieving process info.")
     }
 
-    results := make([]*Process, 0)
+    results := make([]*so.Process, 0)
     for {
         path, ll, _ := getProcessFullPathAndLUID(entry.ProcessID)
 
