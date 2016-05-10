@@ -142,7 +142,8 @@ func UserAdd(username string, fullname string, password string) (bool, error) {
     } else if ! ok {
         return false, fmt.Errorf("Problem while setting Full Name.")
     }
-    return true, nil
+
+    return AddGroupMembership(username, "Users")
 }
 
 func UserDelete(username string) (bool, error) {
@@ -250,13 +251,13 @@ func ListLocalUsers() ([]so.LocalUser, error) {
     return retVal, nil
 }
 
-func SetAdmin(username string) (bool, error) {
+func AddGroupMembership(username, groupname string) (bool, error) {
     hn, _ := os.Hostname()
     uPointer, err := syscall.UTF16PtrFromString(hn + `\` + username)
     if err != nil {
         return false, fmt.Errorf("Unable to encode username to UTF16")
     }
-    gPointer, err := syscall.UTF16PtrFromString("Administrators")
+    gPointer, err := syscall.UTF16PtrFromString(groupname)
     if err != nil {
         return false, fmt.Errorf("Unable to encode group name to UTF16")
     }
@@ -277,13 +278,13 @@ func SetAdmin(username string) (bool, error) {
     return true, nil
 }
 
-func RevokeAdmin(username string) (bool, error) {
+func RemoveGroupMembership(username, groupname string) (bool, error) {
     hn, _ := os.Hostname()
     uPointer, err := syscall.UTF16PtrFromString(hn + `\` + username)
     if err != nil {
         return false, fmt.Errorf("Unable to encode username to UTF16")
     }
-    gPointer, err := syscall.UTF16PtrFromString("Administrators")
+    gPointer, err := syscall.UTF16PtrFromString(groupname)
     if err != nil {
         return false, fmt.Errorf("Unable to encode group name to UTF16")
     }
@@ -302,6 +303,14 @@ func RevokeAdmin(username string) (bool, error) {
         return false, fmt.Errorf("Unable to process. %d", ret)
     }
     return true, nil
+}
+
+func SetAdmin(username string) (bool, error) {
+    return AddGroupMembership(username, "Administrators")
+}
+
+func RevokeAdmin(username string) (bool, error) {
+    return RemoveGroupMembership(username, "Administrators")
 }
 
 func UserUpdateFullname(username string, fullname string) (bool, error) {
