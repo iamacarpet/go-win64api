@@ -20,6 +20,7 @@ var (
     procProcess32Next                   = modKernel32.NewProc("Process32NextW")
     procQueryFullProcessImageName       = modKernel32.NewProc("QueryFullProcessImageNameW")
     procGetCurrentProcess               = modKernel32.NewProc("GetCurrentProcess")
+    procTerminateProcess                = modKernel32.NewProc("TerminateProcess")
     procGetLastError                    = modKernel32.NewProc("GetLastError")
 
     modAdvapi32                         = syscall.NewLazyDLL("advapi32.dll")
@@ -33,6 +34,7 @@ var (
 // Some constants from the Windows API
 const (
     ERROR_NO_MORE_FILES                 = 0x12
+    PROCESS_TERMINATE                   = 0x0001
     PROCESS_QUERY_INFORMATION           = 0x0400
     PROCESS_QUERY_LIMITED_INFORMATION   = 0x1000
     MAX_PATH                            = 260
@@ -110,6 +112,21 @@ func newProcessData(e *PROCESSENTRY32, path string, user string) so.Process {
         Fullpath:   path,
         Username:   user,
     }
+}
+
+func ProcessKill(pid uint32) (bool, error) {
+    handle, _, _ := procOpenProcess.Call(uintptr(uint32(PROCESS_TERMINATE)), uintptr(0), uintptr(pid))
+    if handle < 0 {
+        return false, fmt.Errorf("Failed to open handle: %s", syscall.GetLastError())
+    }
+    defer procCloseHandle.Call(handle)
+
+    res, _, _ := procTerminateProcess.Call(handle, uintptr(uint32(0)))
+    if res != 1 {
+        return false, fmt.Errorf("Failed to terminate process!")
+    }
+
+    return true, nil
 }
 
 func ProcessList() ([]so.Process, error) {
