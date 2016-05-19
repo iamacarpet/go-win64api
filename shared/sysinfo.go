@@ -5,55 +5,55 @@ import (
 )
 
 type Hardware struct {
-    HardwareUUID        string
-    Manufacturer        string
-    Model               string
-    ServiceTag          string
-    BIOSVersion         string
-    BIOSManufacturer    string
-    BIOSReleaseDate     time.Time
-    CPU                 []CPU
-    Memory              []MemoryDIMM
+    HardwareUUID        string              `json:"HardwareUUID"`
+    Manufacturer        string              `json:"Manufacturer"`
+    Model               string              `json:"Model"`
+    ServiceTag          string              `json:"ServiceTag"`
+    BIOSVersion         string              `json:"biosVersion"`
+    BIOSManufacturer    string              `json:"biosManufacturer"`
+    BIOSReleaseDate     time.Time           `json:"biosReleaseDate"`
+    CPU                 []CPU               `json:"cpus"`
+    Memory              []MemoryDIMM        `json:"memoryDIMMs"`
 }
 
 type CPU struct {
-    FriendlyName        string
-    NumberOfCores       uint8
-    NumberOfLogical     uint8
+    FriendlyName        string              `json:"FriendlyName"`
+    NumberOfCores       uint8               `json:"cores"`
+    NumberOfLogical     uint8               `json:"logical"`
 }
 
 type MemoryDIMM struct {
-    MType               string
-    Size                uint64
-    Speed               uint16
+    MType               string              `json:"MemoryType"`
+    Size                uint64              `json:"Size"`
+    Speed               uint16              `json:"Speed"`
 }
 
 type OperatingSystem struct {
-    FriendlyName        string
-    Version             string
-    Architecture        string
-    LanguageCode        uint16
+    FriendlyName        string              `json:"FriendlyName"`
+    Version             string              `json:"Version"`
+    Architecture        string              `json:"Architecture"`
+    LanguageCode        uint16              `json:"Language"`
 }
 
 type Memory struct {
-    TotalRAM                uint64
-    UsableRAM               uint64
-    FreeRAM                 uint64
-    TotalPageFile           uint64
-    FreePageFile            uint64
-    SystemManagedPageFile   bool
+    TotalRAM                uint64          `json:"totalRAM"`
+    UsableRAM               uint64          `json:"usableRAM"`
+    FreeRAM                 uint64          `json:"freeRAM"`
+    TotalPageFile           uint64          `json:"totalPF"`
+    FreePageFile            uint64          `json:"freePF"`
+    SystemManagedPageFile   bool            `json:"managedPF"`
 }
 
 type Disk struct {
-    DriveName           string
-    TotalSize           uint64
-    Available           uint64
-    FileSystem          string
+    DriveName           string              `json:"DriveName"`
+    TotalSize           uint64              `json:"TotalSize"`
+    Available           uint64              `json:"FreeSpace"`
+    FileSystem          string              `json:"FileSystem"`
 }
 
 type Network struct {
-    Name                string
-    MACAddress          string
-    IPAddressCIDR       []string
-    DHCPEnabled         bool
+    Name                string              `json:"NetworkName"`
+    MACAddress          string              `json:"MACAddress"`
+    IPAddressCIDR       []string            `json:"IPAddresses"`
+    DHCPEnabled         bool                `json:"DHCPEnabled"`
 }
