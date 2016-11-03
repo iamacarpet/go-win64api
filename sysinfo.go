@@ -25,6 +25,17 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
     retDISK := make([]so.Disk, 0)
     retNET  := make([]so.Network, 0)
 
+    // Pre-WMI Queries
+    var err error
+    retHW.IsUsingUEFI, err = sysinfo_uefi_check()
+    if err != nil {
+        return retHW, retOS, retMEM, retDISK, retNET, fmt.Errorf("Failed to get UEFI status, %s", err.Error())
+    }
+    retHW.SecureBootEnabled, err = sysinfo_secureboot_check()
+    if err != nil {
+        return retHW, retOS, retMEM, retDISK, retNET, fmt.Errorf("Failed to get SecureBoot status, %s", err.Error())
+    }
+
     unknown, err := oleutil.CreateObject("WbemScripting.SWbemLocator")
     if err != nil {
         return retHW, retOS, retMEM, retDISK, retNET, fmt.Errorf("Unable to create initial object, %s", err.Error())
@@ -526,6 +537,8 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
                         return fmt.Errorf("Error asserting Available (DISK) as string from Logical Disk Info. Got type %s", reflect.TypeOf(resFreeSP.Value()).Name())
                     }
                 }
+
+                retDR.BitLockerEnabled, retDR.BitLockerEncrypted, _ = sysinfo_bitlocker_check(resName.ToString())
 
                 retDISK = append(retDISK, retDR)
 

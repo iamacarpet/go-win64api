@@ -12,6 +12,8 @@ type Hardware struct {
     BIOSVersion         string              `json:"biosVersion"`
     BIOSManufacturer    string              `json:"biosManufacturer"`
     BIOSReleaseDate     time.Time           `json:"biosReleaseDate"`
+    IsUsingUEFI         bool                `json:"isUsingUEFI"`
+    SecureBootEnabled   bool                `json:"safebootEnabled"`
     CPU                 []CPU               `json:"cpus"`
     Memory              []MemoryDIMM        `json:"memoryDIMMs"`
 }
@@ -49,6 +51,8 @@ type Disk struct {
     TotalSize           uint64              `json:"TotalSize"`
     Available           uint64              `json:"FreeSpace"`
     FileSystem          string              `json:"FileSystem"`
+    BitLockerEnabled    bool                `json:"BitLockerEnabled"`
+    BitLockerEncrypted  bool                `json:"BitLockerEncrypted"`
 }
 
 type Network struct {

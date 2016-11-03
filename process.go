@@ -46,6 +46,7 @@ const (
     PROC_SE_PRIVILEGE_ENABLED           = 0x00000002
 
     PROC_SE_DEBUG_NAME                  = "SeDebugPrivilege"
+    PROC_SE_SYSTEM_ENVIRONMENT_PRIV     = "SeSystemEnvironmentPrivilege"
 )
 
 // PROCESSENTRY32 is the Windows API structure that contains a process's
@@ -130,7 +131,7 @@ func ProcessKill(pid uint32) (bool, error) {
 }
 
 func ProcessList() ([]so.Process, error) {
-    err := procAssignCorrectPrivs()
+    err := procAssignCorrectPrivs(PROC_SE_DEBUG_NAME)
     if err != nil {
         return nil, fmt.Errorf("Error assigning privs... %s", err.Error())
     }
@@ -177,7 +178,7 @@ func ProcessList() ([]so.Process, error) {
 }
 
 func ProcessLUIDList() (map[uint32]LUID, error) {
-    err := procAssignCorrectPrivs()
+    err := procAssignCorrectPrivs(PROC_SE_DEBUG_NAME)
     if err != nil {
         return nil, fmt.Errorf("Error assigning privs... %s", err.Error())
     }
@@ -211,7 +212,7 @@ func ProcessLUIDList() (map[uint32]LUID, error) {
     return pMap, nil
 }
 
-func procAssignCorrectPrivs() (error) {
+func procAssignCorrectPrivs(name string) (error) {
     handle, _, _ := procGetCurrentProcess.Call()
     if handle == uintptr(0) {
         return fmt.Errorf("Unable to get current process handle.")
@@ -229,7 +230,7 @@ func procAssignCorrectPrivs() (error) {
     }
     defer procCloseHandle.Call(tHandle)
 
-    nPointer, err := syscall.UTF16PtrFromString(PROC_SE_DEBUG_NAME)
+    nPointer, err := syscall.UTF16PtrFromString(name)
     if err != nil {
         return fmt.Errorf("Unable to encode SE_DEBUG_NAME to UTF16")
     }
