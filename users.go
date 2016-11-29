@@ -16,6 +16,7 @@ var (
     usrNetUserEnum                          = modNetapi32.NewProc("NetUserEnum")
     usrNetUserAdd                           = modNetapi32.NewProc("NetUserAdd")
     usrNetUserDel                           = modNetapi32.NewProc("NetUserDel")
+    usrNetGetAnyDCName                      = modNetapi32.NewProc("NetGetAnyDCName")
     usrNetUserGetInfo                       = modNetapi32.NewProc("NetUserGetInfo")
     usrNetUserSetInfo                       = modNetapi32.NewProc("NetUserSetInfo")
     usrNetLocalGroupAddMembers              = modNetapi32.NewProc("NetLocalGroupAddMembers")
@@ -169,6 +170,46 @@ func IsLocalUserAdmin(username string) (bool, error) {
     }
     _, _, _ = usrNetUserGetInfo.Call(
         uintptr(0), // servername
+        uintptr(unsafe.Pointer(uPointer)), // username
+        uintptr(uint32(1)), // level, request USER_INFO_1
+        uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
+    )
+    defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dataPointer)))
+
+    if dataPointer == uintptr(0) {
+        return false, fmt.Errorf("Unable to get data structure.")
+    }
+
+    var data *USER_INFO_1 = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
+
+    if data.Usri1_priv == USER_PRIV_ADMIN {
+        return true, nil
+    } else {
+        return false, nil
+    }
+}
+
+func IsDomainUserAdmin(username string, domain string) (bool, error) {
+    var dataPointer uintptr
+    var dcPointer uintptr
+    uPointer, err := syscall.UTF16PtrFromString(username)
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode username to UTF16")
+    }
+    dPointer, err := syscall.UTF16PtrFromString(domain)
+    if err != nil {
+        return false, fmt.Errorf("Unable to encode domain to UTF16")
+    }
+
+    _, _, _ = usrNetGetAnyDCName.Call(
+        uintptr(0), // servername
+        uintptr(unsafe.Pointer(dPointer)), // domainame
+        uintptr(unsafe.Pointer(&dcPointer)),
+    )
+    defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dcPointer)))
+
+    _, _, _ = usrNetUserGetInfo.Call(
+        uintptr(dcPointer), // servername
         uintptr(unsafe.Pointer(uPointer)), // username
         uintptr(uint32(1)), // level, request USER_INFO_1
         uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.

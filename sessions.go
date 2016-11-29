@@ -101,6 +101,10 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
                                     if isAdmin, _ := IsLocalUserAdmin(ud.Username); isAdmin {
                                         ud.LocalAdmin = true
                                     }
+                                } else {
+                                    if isAdmin, _ := IsDomainUserAdmin(ud.Username, LsatoString(data.DnsDomainName)); isAdmin {
+                                        ud.LocalAdmin = true
+                                    }
                                 }
                                 uSessList = append(uSessList, ud)
                             }
