@@ -46,7 +46,11 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
         return retHW, retOS, retMEM, retDISK, retNET, fmt.Errorf("Unable to create query interface, %s", err.Error())
     }
     defer wmi.Release()
-    serviceRaw, _ := oleutil.CallMethod(wmi, "ConnectServer")
+
+    serviceRaw, err := oleutil.CallMethod(wmi, "ConnectServer")
+    if err != nil {
+        return retHW, retOS, retMEM, retDISK, retNET, fmt.Errorf("Error Connecting to WMI Service, %s", err.Error())
+    }
     service := serviceRaw.ToIDispatch()
     defer service.Release()
 
