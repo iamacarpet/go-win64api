@@ -200,3 +200,15 @@ ok, err := wapi.UserPasswordNoExpires(username, s)
 ```go
 ok, err := wapi.ChangePassword(username, newpassword)
 ```
+
+### Windows Firewall - Add Inbound Rule
+```go
+added, err := wapi.FirewallRuleCreate(
+	"App Rule Name",
+	"App Rule Long Description.",
+	"My Rule Group",
+	"%systemDrive%\\path\\to\\my.exe",
+	"port number as string",
+	wapi.NET_FW_IP_PROTOCOL_TCP,
+)
+```
