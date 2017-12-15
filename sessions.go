@@ -84,7 +84,8 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
                 //fmt.Printf("%s\\%s Type: %d\r\n", strings.ToUpper(LsatoString(data.LogonDomain)), strings.ToLower(LsatoString(data.UserName)), data.LogonType)
                 validTypes := []uint32{SESS_INTERACTIVE_LOGON, SESS_CACHED_INTERACTIVE_LOGON, SESS_REMOTE_INTERACTIVE_LOGON}
                 if in_array(data.LogonType, validTypes) {
-                    if LsatoString(data.LogonDomain) != "Window Manager" {
+                    strLogonDomain := strings.ToUpper(LsatoString(data.LogonDomain))
+                    if strLogonDomain != "WINDOW MANAGER" && strLogonDomain != "FONT DRIVER HOST" {
                         sUser := fmt.Sprintf("%s\\%s", strings.ToUpper(LsatoString(data.LogonDomain)), strings.ToLower(LsatoString(data.UserName)))
                         sort.Strings(uList)
                         i := sort.Search(len(uList), func(i int) bool { return uList[i] >= sUser })
@@ -93,7 +94,7 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
                                 uList = append(uList, sUser)
                                 ud := so.SessionDetails{
                                     Username: strings.ToLower(LsatoString(data.UserName)),
-                                    Domain: strings.ToUpper(LsatoString(data.LogonDomain)),
+                                    Domain: strLogonDomain,
                                 }
                                 hn, _ := os.Hostname()
                                 if strings.ToUpper(ud.Domain) == strings.ToUpper(hn) {
