@@ -217,7 +217,7 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
 
     // Query 4 - Operating System information.
     err = func () (error) {
-        resultRaw, err := oleutil.CallMethod(service, "ExecQuery", "SELECT Caption, Version, OSArchitecture, OSLanguage, TotalVisibleMemorySize, FreePhysicalMemory, TotalVirtualMemorySize, FreeVirtualMemory FROM Win32_OperatingSystem")
+        resultRaw, err := oleutil.CallMethod(service, "ExecQuery", "SELECT Caption, Version, OSArchitecture, OSLanguage, TotalVisibleMemorySize, FreePhysicalMemory, TotalVirtualMemorySize, FreeVirtualMemory, LastBootUpTime FROM Win32_OperatingSystem")
         if err != nil {
             return fmt.Errorf("Unable to execute query while getting Operating System info. %s", err.Error())
         }
@@ -322,6 +322,21 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
                     }
                 } else {
                     return fmt.Errorf("Error asserting FreeVirtualMemory as string from Operating System Info. Got type %s", reflect.TypeOf(resFreePageFile.Value()).Name())
+                }
+            }
+
+            resLastBootUpTime, err := oleutil.GetProperty(item, "LastBootUpTime")
+            if err != nil {
+                return fmt.Errorf("Error while getting property LastBootUpTime from Operating System info. %s", err.Error())
+            }
+            if resLastBootUpTime.Value() != nil {
+                if resLBUT, ok := resLastBootUpTime.Value().(string); ok {
+                    retOS.LastBootUpTime, err = ConvertWMITime(resLBUT)
+                    if err != nil {
+                        return fmt.Errorf("Error parsing LastBootUpTime: %s", err)
+                    }
+                } else {
+                    return fmt.Errorf("Error asserting LastBootUpTime as string from Operating System Info. Got type %s", reflect.TypeOf(resFreePageFile.Value()).Name())
                 }
             }
         }
@@ -711,4 +726,36 @@ func ParseIPv4Mask(s string) net.IPMask {
 		return nil
 	}
 	return net.IPv4Mask(mask[12], mask[13], mask[14], mask[15])
+}
+
+func ConvertWMITime(s string) (time.Time, error) {
+	if len(s) == 26 {
+		return time.Time{}, fmt.Errorf("Invalid Length of DATETIME string")
+	}
+
+	offset := s[22:]
+	iOffset, err := strconv.Atoi(offset)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("Error parsing offset: %s", err)
+	}
+
+	var h, m int = (iOffset / 60), (iOffset % 60)
+	var hr, mn string
+	if h < 10 {
+		hr = "0" + strconv.Itoa(h)
+	} else {
+		hr = strconv.Itoa(h)
+	}
+	if m < 10 {
+		mn = "0" + strconv.Itoa(m)
+	} else {
+		mn = strconv.Itoa(m)
+	}
+
+	res, err := time.Parse("20060102150405.999999-07:00", s[:22]+hr+":"+mn)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("Error parsing time: %s", err)
+	}
+
+	return res, nil
 }
