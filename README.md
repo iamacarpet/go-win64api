@@ -84,21 +84,23 @@ func main(){
 package main
 
 import (
-    "fmt"
-    wapi "github.com/iamacarpet/go-win64api"
+        "fmt"
+        "time"
+        wapi "github.com/iamacarpet/go-win64api"
 )
 
-func main(){
-    upd, nupd,  err := wapi.UpdatesPending()
-    if err != nil {
-        fmt.Printf("error: %s\r\n", err.Error())
-    }
+func main() {
+        ret, err := wapi.UpdatesPending()
+        if err != nil {
+                fmt.Printf("Error fetching data... %s\r\n", err.Error())
+        }
 
-    if upd {
-        fmt.Printf("%d Updates Pending\r\n", nupd)
-    } else {
-        fmt.Printf("No Updates Pending\r\n")
-    }
+        fmt.Printf("Number of Updates Available: %d\n", ret.NumUpdates)
+        fmt.Printf("Updates Pending:             %t\n\n", ret.UpdatesReq)
+        fmt.Printf("%25s | %25s | %s\n", "EVENT DATE", "STATUS", "UPDATE NAME")
+        for _, v := range ret.UpdateHistory {
+                fmt.Printf("%25s | %25s | %s\n", v.EventDate.Format(time.RFC822), v.Status, v.UpdateName)
+        }
 }
 ```
 
@@ -113,7 +115,7 @@ import (
     wapi "github.com/iamacarpet/go-win64api"
 )
 
-func listServices(){
+func main(){
     svc, err := wapi.GetServices()
     if err != nil {
         fmt.Printf("%s\r\n", err.Error())
