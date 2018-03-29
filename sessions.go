@@ -59,7 +59,7 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
 		sizeTest          LUID
 		uList             []string            = make([]string, 0)
 		uSessList         []so.SessionDetails = make([]so.SessionDetails, 0)
-		PidLUIDList       map[uint32]LUID
+		PidLUIDList       map[uint32]SessionLUID
 	)
 	PidLUIDList, err := ProcessLUIDList()
 	if err != nil {
@@ -90,11 +90,12 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
 						sort.Strings(uList)
 						i := sort.Search(len(uList), func(i int) bool { return uList[i] >= sUser })
 						if !(i < len(uList) && uList[i] == sUser) {
-							if luidinmap(&data.LogonId, &PidLUIDList) {
+							if uok, isAdmin := luidinmap(&data.LogonId, &PidLUIDList); uok {
 								uList = append(uList, sUser)
 								ud := so.SessionDetails{
-									Username: strings.ToLower(LsatoString(data.UserName)),
-									Domain:   strLogonDomain,
+									Username:   strings.ToLower(LsatoString(data.UserName)),
+									Domain:     strLogonDomain,
+									LocalAdmin: isAdmin,
 								}
 								hn, _ := os.Hostname()
 								if strings.ToUpper(ud.Domain) == strings.ToUpper(hn) {
@@ -156,13 +157,17 @@ func sessUserLUIDs() (map[LUID]string, error) {
 	return uList, nil
 }
 
-func luidinmap(needle *LUID, haystack *map[uint32]LUID) bool {
+func luidinmap(needle *LUID, haystack *map[uint32]SessionLUID) (bool, bool) {
 	for _, l := range *haystack {
-		if reflect.DeepEqual(l, *needle) {
-			return true
+		if reflect.DeepEqual(l.Value, *needle) {
+			if l.IsAdmin {
+				return true, true
+			} else {
+				return true, false
+			}
 		}
 	}
-	return false
+	return false, false
 }
 
 func LsatoString(p LSA_UNICODE_STRING) string {

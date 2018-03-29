@@ -23,12 +23,16 @@ var (
 	procTerminateProcess          = modKernel32.NewProc("TerminateProcess")
 	procGetLastError              = modKernel32.NewProc("GetLastError")
 
-	modAdvapi32               = syscall.NewLazyDLL("advapi32.dll")
-	procOpenProcessToken      = modAdvapi32.NewProc("OpenProcessToken")
-	procLookupPrivilegeValue  = modAdvapi32.NewProc("LookupPrivilegeValueW")
-	procAdjustTokenPrivileges = modAdvapi32.NewProc("AdjustTokenPrivileges")
-	procGetTokenInformation   = modAdvapi32.NewProc("GetTokenInformation")
-	procLookupAccountSid      = modAdvapi32.NewProc("LookupAccountSidW")
+	modAdvapi32                  = syscall.NewLazyDLL("advapi32.dll")
+	procOpenProcessToken         = modAdvapi32.NewProc("OpenProcessToken")
+	procLookupPrivilegeValue     = modAdvapi32.NewProc("LookupPrivilegeValueW")
+	procAdjustTokenPrivileges    = modAdvapi32.NewProc("AdjustTokenPrivileges")
+	procGetTokenInformation      = modAdvapi32.NewProc("GetTokenInformation")
+	procLookupAccountSid         = modAdvapi32.NewProc("LookupAccountSidW")
+	procCheckTokenMembership     = modAdvapi32.NewProc("CheckTokenMembership")
+	procAllocateAndInitializeSid = modAdvapi32.NewProc("AllocateAndInitializeSid")
+	procFreeSid                  = modAdvapi32.NewProc("FreeSid")
+	procDuplicateToken           = modAdvapi32.NewProc("DuplicateToken")
 )
 
 // Some constants from the Windows API
@@ -40,6 +44,7 @@ const (
 	MAX_PATH                          = 260
 	MAX_FULL_PATH                     = 4096
 
+	PROC_TOKEN_DUPLICATE         = 0x0002
 	PROC_TOKEN_QUERY             = 0x0008
 	PROC_TOKEN_ADJUST_PRIVILEGES = 0x0020
 
@@ -47,6 +52,12 @@ const (
 
 	PROC_SE_DEBUG_NAME              = "SeDebugPrivilege"
 	PROC_SE_SYSTEM_ENVIRONMENT_PRIV = "SeSystemEnvironmentPrivilege"
+
+	PROC_SECURITY_BUILTIN_DOMAIN_RID = 0x00000020
+	PROC_DOMAIN_ALIAS_RID_ADMINS     = 0x00000220
+
+	PROC_ERROR_NO_SUCH_LOGON_SESSION = 1312
+	PROC_ERROR_PRIVILEGE_NOT_HELD    = 1314
 )
 
 // PROCESSENTRY32 is the Windows API structure that contains a process's
@@ -94,6 +105,12 @@ type TOKEN_STATISTICS struct {
 	GroupCount         uint32
 	PrivilegeCount     uint32
 	ModifiedId         LUID
+}
+
+type PSID uintptr
+
+type SID_IDENTIFIER_AUTHORITY struct {
+	Value [6]byte
 }
 
 func newProcessData(e *PROCESSENTRY32, path string, user string) so.Process {
@@ -177,7 +194,12 @@ func ProcessList() ([]so.Process, error) {
 	return results, nil
 }
 
-func ProcessLUIDList() (map[uint32]LUID, error) {
+type SessionLUID struct {
+	Value   LUID
+	IsAdmin bool
+}
+
+func ProcessLUIDList() (map[uint32]SessionLUID, error) {
 	err := procAssignCorrectPrivs(PROC_SE_DEBUG_NAME)
 	if err != nil {
 		return nil, fmt.Errorf("Error assigning privs... %s", err.Error())
@@ -189,7 +211,7 @@ func ProcessLUIDList() (map[uint32]LUID, error) {
 	}
 	defer procCloseHandle.Call(handle)
 
-	pMap := make(map[uint32]LUID)
+	pMap := make(map[uint32]SessionLUID)
 
 	var entry PROCESSENTRY32
 	entry.Size = uint32(unsafe.Sizeof(entry))
@@ -199,9 +221,12 @@ func ProcessLUIDList() (map[uint32]LUID, error) {
 	}
 
 	for {
-		ll, _ := getProcessLUID(entry.ProcessID)
+		ll, isAdmin, _ := getProcessLUID(entry.ProcessID)
 
-		pMap[entry.ProcessID] = ll
+		pMap[entry.ProcessID] = SessionLUID{
+			Value:   ll,
+			IsAdmin: isAdmin,
+		}
 
 		ret, _, _ := procProcess32Next.Call(handle, uintptr(unsafe.Pointer(&entry)))
 		if ret == 0 {
@@ -265,38 +290,148 @@ func procAssignCorrectPrivs(name string) error {
 	return nil
 }
 
-func getProcessLUID(pid uint32) (LUID, error) {
-	handle, _, _ := procOpenProcess.Call(uintptr(uint32(PROCESS_QUERY_INFORMATION)), uintptr(0), uintptr(pid))
+func getProcessLUID(pid uint32) (retLUID LUID, isAdmin bool, retError error) {
+	retLUID = LUID{}
+
+	handle, _, lastError := procOpenProcess.Call(uintptr(uint32(PROCESS_QUERY_INFORMATION)), uintptr(0), uintptr(pid))
 	if handle < 0 {
-		return LUID{}, syscall.GetLastError()
+		retError = lastError
+		return
 	}
 	defer procCloseHandle.Call(handle)
 
-	var tHandle uintptr
+	var ptHandle uintptr
 	opRes, _, _ := procOpenProcessToken.Call(
 		uintptr(handle),
 		uintptr(uint32(PROC_TOKEN_QUERY)),
-		uintptr(unsafe.Pointer(&tHandle)),
+		uintptr(unsafe.Pointer(&ptHandle)),
 	)
 	if opRes != 1 {
-		return LUID{}, fmt.Errorf("Unable to open process token.")
+		retError = fmt.Errorf("Unable to open process token.")
+		return
 	}
-	defer procCloseHandle.Call(tHandle)
+	defer procCloseHandle.Call(ptHandle)
 
 	var sData TOKEN_STATISTICS
 	var sLength uint32
 	tsRes, _, _ := procGetTokenInformation.Call(
-		uintptr(tHandle),
+		uintptr(ptHandle),
 		uintptr(uint32(10)), // TOKEN_STATISTICS
 		uintptr(unsafe.Pointer(&sData)),
 		uintptr(uint32(unsafe.Sizeof(sData))),
 		uintptr(unsafe.Pointer(&sLength)),
 	)
 	if tsRes != 1 {
-		return LUID{}, fmt.Errorf("Error fetching token information (LUID).")
+		retError = fmt.Errorf("Error fetching token information (LUID).")
+		return
+	}
+	retLUID = sData.AuthenticationId
+
+	// Grab the token again for the next bit,
+	// as if we try and combine this with the first bit,
+	// the token grab will fail unless run as NT AUTHORITY\SYSTEM
+	var tHandle uintptr
+	opRes2, _, _ := procOpenProcessToken.Call(
+		uintptr(handle),
+		uintptr(uint32(PROC_TOKEN_QUERY|PROC_TOKEN_DUPLICATE)),
+		uintptr(unsafe.Pointer(&tHandle)),
+	)
+	if opRes2 != 1 {
+		retError = fmt.Errorf("Unable to open process token.")
+		return
+	}
+	defer procCloseHandle.Call(tHandle)
+
+	// Generate an SID for the Administrators group.
+	NtAuthority := SID_IDENTIFIER_AUTHORITY{
+		Value: [6]byte{0, 0, 0, 0, 0, 5}, // SECURITY_NT_AUTHORITY
+	}
+	var AdministratorsGroup PSID
+	sidRes, _, _ := procAllocateAndInitializeSid.Call(
+		uintptr(unsafe.Pointer(&NtAuthority)),
+		uintptr(uint8(2)),
+		uintptr(uint32(PROC_SECURITY_BUILTIN_DOMAIN_RID)),
+		uintptr(uint32(PROC_DOMAIN_ALIAS_RID_ADMINS)),
+		uintptr(0), uintptr(0), uintptr(0), uintptr(0), uintptr(0), uintptr(0),
+		uintptr(unsafe.Pointer(&AdministratorsGroup)),
+	)
+	if sidRes != 1 {
+		retError = fmt.Errorf("Error generating Administrators SID for group membership check")
+		return
+	}
+	defer procFreeSid.Call(uintptr(AdministratorsGroup))
+
+	// Duplicate the token...
+	var ttHandle uintptr
+	dupRes, _, lastError := procDuplicateToken.Call(
+		uintptr(tHandle),
+		uintptr(1), // _SECURITY_IMPERSONATION_LEVEL = SecurityIdentification
+		uintptr(unsafe.Pointer(&ttHandle)),
+	)
+	defer procCloseHandle.Call(ttHandle)
+	if dupRes != 1 {
+		retError = fmt.Errorf("Error generating impersonation token: %s", lastError)
+		return
 	}
 
-	return sData.AuthenticationId, nil
+	// Check token for membership of the Administrators group.
+	var chkRes bool
+	mbrRes, _, _ := procCheckTokenMembership.Call(
+		uintptr(ttHandle),
+		uintptr(AdministratorsGroup),
+		uintptr(unsafe.Pointer(&chkRes)),
+	)
+	if mbrRes != 1 {
+		retError = fmt.Errorf("Error checking group membership")
+		return
+	} else {
+		isAdmin = chkRes
+	}
+
+	var ltHandle uintptr
+	var length uint32
+	ltokRes, _, lastError := procGetTokenInformation.Call(
+		uintptr(tHandle),
+		uintptr(19), // TokenLinkedToken
+		uintptr(unsafe.Pointer(&ltHandle)),
+		uintptr(uint32(unsafe.Sizeof(ltHandle))),
+		uintptr(unsafe.Pointer(&length)),
+	)
+	if ltokRes != 1 {
+		if lastError.(syscall.Errno) == PROC_ERROR_NO_SUCH_LOGON_SESSION || lastError.(syscall.Errno) == PROC_ERROR_PRIVILEGE_NOT_HELD {
+			return
+		} else {
+			retError = fmt.Errorf("Error getting linked token: %d: %s", lastError.(syscall.Errno), lastError)
+			return
+		}
+	}
+	defer procCloseHandle.Call(ltHandle)
+
+	var lttHandle uintptr
+	dup2Res, _, lastError := procDuplicateToken.Call(
+		uintptr(ltHandle),
+		uintptr(1), // _SECURITY_IMPERSONATION_LEVEL = SecurityIdentification
+		uintptr(unsafe.Pointer(&lttHandle)),
+	)
+	if dup2Res != 1 {
+		retError = fmt.Errorf("Error generating impersonation token (2): %s", lastError)
+		return
+	}
+	defer procCloseHandle.Call(lttHandle)
+
+	mbr2Res, _, lastError := procCheckTokenMembership.Call(
+		uintptr(lttHandle),
+		uintptr(AdministratorsGroup),
+		uintptr(unsafe.Pointer(&chkRes)),
+	)
+	if mbr2Res != 1 {
+		retError = fmt.Errorf("Error checking group membership (2): %s", lastError)
+		return
+	} else {
+		isAdmin = chkRes
+	}
+
+	return
 }
 
 func getProcessFullPathAndLUID(pid uint32) (string, LUID, error) {

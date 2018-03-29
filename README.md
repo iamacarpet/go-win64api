@@ -38,6 +38,13 @@ import (
 )
 
 func main(){
+    // This check runs best as NT AUTHORITY\SYSTEM
+    //
+    // Running as a normal or even elevated user,
+    // we can't properly detect who is an admin or not.
+    //
+    // This is because we require TOKEN_DUPLICATE permission,
+    // which we don't seem to have otherwise (Win10).
     users, err := wapi.ListLoggedInUsers()
     if err != nil {
         fmt.Printf("Error fetching user session list.\r\n")
