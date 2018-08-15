@@ -1,4 +1,5 @@
 // +build windows,amd64
+
 package winapi
 
 import (
@@ -113,21 +114,66 @@ type LOCALGROUP_MEMBERS_INFO_3 struct {
 	Lgrmi3_domainandname *uint16
 }
 
-func UserAdd(username string, fullname string, password string) (bool, error) {
+// UserAddOptions contains extended options for creating a new user account.
+//
+// The only required fields are Username and Password.
+//
+// Fields:
+//	- Username		account username, limited to 20 characters.
+//	- Password 		account password
+//	- FullName		user's full name (default: none)
+//  - PrivLevel		account's prvilege level, must be one of the USER_PRIV_* constants
+//					(default: USER_PRIV_GUEST)
+// 	- HomeDir		If non-empty, the user's home directory is set to the specified
+//					path.
+//	- Comment		A comment to associate with the account (default: none)
+//	- ScriptPath 	If non-empty, the path to the user's logon script file, which can
+//					be a .CMD, .EXE, or .BAT file. (default: none)
+type UserAddOptions struct {
+	// Required
+	Username string
+	Password string
+
+	// Optional
+	FullName   string
+	PrivLevel  int
+	HomeDir    string
+	Comment    string
+	ScriptPath string
+}
+
+func UserAddEx(opts UserAddOptions) (bool, error) {
 	var parmErr uint32
-	uPointer, err := syscall.UTF16PtrFromString(username)
-	if err != nil {
-		return false, fmt.Errorf("Unable to encode username to UTF16")
-	}
-	pPointer, err := syscall.UTF16PtrFromString(password)
-	if err != nil {
-		return false, fmt.Errorf("Unable to encode password to UTF16")
-	}
+	var err error
 	uInfo := USER_INFO_1{
-		Usri1_name:     uPointer,
-		Usri1_password: pPointer,
-		Usri1_priv:     USER_PRIV_USER,
-		Usri1_flags:    USER_UF_SCRIPT | USER_UF_NORMAL_ACCOUNT | USER_UF_DONT_EXPIRE_PASSWD,
+		Usri1_priv:  opts.PrivLevel,
+		Usri1_flags: USER_UF_SCRIPT | USER_UF_NORMAL_ACCOUNT | USER_UF_DONT_EXPIRE_PASSWD,
+	}
+	uInfo.Usri1_name, err = syscall.UTF16PtrFromString(opts.Username)
+	if err != nil {
+		return false, fmt.Errorf("Unable to encode username to UTF16: %s", err)
+	}
+	uInfo.Usri1_password, err = syscall.UTF16PtrFromString(opts.Password)
+	if err != nil {
+		return false, fmt.Errorf("Unable to encode password to UTF16: %s", err)
+	}
+	if opts.Comment != "" {
+		uInfo.Usri1_comment, err = syscall.UTF16PtrFromString(opts.Comment)
+		if err != nil {
+			return false, fmt.Errorf("Unable to encode comment to UTF16: %s", err)
+		}
+	}
+	if opts.HomeDir != "" {
+		uInfo.Usri1_home_dir, err = syscall.UTF16PtrFromString(opts.HomeDir)
+		if err != nil {
+			return false, fmt.Errorf("Unable to encode home directory path to UTF16: %s", err)
+		}
+	}
+	if opts.ScriptPath != "" {
+		uInfo.Usri1_script_path, err = syscall.UTF16PtrFromString(opts.HomeDir)
+		if err != nil {
+			return false, fmt.Errorf("Unable to encode script path to UTF16: %s", err)
+		}
 	}
 	ret, _, _ := usrNetUserAdd.Call(
 		uintptr(0),
@@ -136,15 +182,28 @@ func UserAdd(username string, fullname string, password string) (bool, error) {
 		uintptr(unsafe.Pointer(&parmErr)),
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return false, fmt.Errorf("Unable to process. %d %d", ret, parmErr)
+		return false, fmt.Errorf("Unable to process: status=%d error=%d", ret, parmErr)
 	}
-	if ok, err := UserUpdateFullname(username, fullname); err != nil {
-		return false, fmt.Errorf("While setting Full Name. %s", err.Error())
-	} else if !ok {
-		return false, fmt.Errorf("Problem while setting Full Name.")
+	if opts.FullName != "" {
+		ok, err := UserUpdateFullname(opts.Username, opts.FullName)
+		if err != nil {
+			return false, fmt.Errorf("Unable to set full name: %s", err)
+		}
+		if !ok {
+			return false, fmt.Errorf("Problem while setting Full Name")
+		}
 	}
 
-	return AddGroupMembership(username, "Users")
+	return AddGroupMembership(opts.Username, "Users")
+}
+
+func UserAdd(username string, fullname string, password string) (bool, error) {
+	return UserAddEx(UserAddOptions{
+		Username:  username,
+		Password:  password,
+		FullName:  fullname,
+		PrivLevel: USER_PRIV_USER_,
+	})
 }
 
 func UserDelete(username string) (bool, error) {
