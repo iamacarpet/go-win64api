@@ -1,8 +1,10 @@
 // +build windows,amd64
+
 package winapi
 
 import (
 	"fmt"
+
 	"golang.org/x/sys/windows/registry"
 
 	so "github.com/iamacarpet/go-win64api/shared"

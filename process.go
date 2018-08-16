@@ -1,4 +1,5 @@
 // +build windows,amd64
+
 package winapi
 
 import (
