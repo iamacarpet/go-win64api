@@ -40,14 +40,26 @@ func getSoftwareList(baseKey string, arch string) ([]so.Software, error) {
 			return nil, fmt.Errorf("Error reading from registry (subkey %s): %s", sw, err.Error())
 		}
 
-		dn, _, err := sk.GetStringValue("DisplayName")
-		if err == nil {
+			dn, _, err := sk.GetStringValue("DisplayName")
+		  if err == nil {
 			swv := so.Software{DisplayName: dn, Arch: arch}
 
 			dv, _, err := sk.GetStringValue("DisplayVersion")
 			if err == nil {
 				swv.DisplayVersion = dv
 			}
+
+			pub, _, err := sk.GetStringValue("Publisher")
+			if err == nil {
+				swv.Pub = pub
+			}
+
+			id, _, err := sk.GetStringValue("InstallDate")
+			if err == nil {
+				swv.InsDate = id
+			}
+
+
 
 			swList = append(swList, swv)
 		}
