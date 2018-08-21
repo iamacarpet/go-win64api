@@ -4,12 +4,7 @@ package winapi
 import (
 	"fmt"
 	"golang.org/x/sys/windows/registry"
-<<<<<<< HEAD
 	so "github.com/Microland/go-win64api/shared"
-=======
-
-	so "github.com/iamacarpet/go-win64api/shared"
->>>>>>> 579b034b8fd354649520edda1487c7c3e2d70411
 )
 
 func InstalledSoftwareList() ([]so.Software, error) {
