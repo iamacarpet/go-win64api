@@ -4,7 +4,7 @@ package winapi
 import (
 	"fmt"
 	"golang.org/x/sys/windows/registry"
-
+"strconv"
 	so "github.com/iamacarpet/go-win64api/shared"
 )
 
@@ -61,7 +61,8 @@ func getSoftwareList(baseKey string, arch string) ([]so.Software, error) {
 
 			es, _, err := sk.GetIntegerValue("EstimatedSize")
 			if err == nil {
-				swv.ESize = es
+				 t := strconv.Itoa(int(es))
+				swv.ESize = t
 			}
 				//fmt.Errorf("Error reading subkey list from registry: %s", err.Error())
 
