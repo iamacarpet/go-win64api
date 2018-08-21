@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	so "github.com/iamacarpet/go-win64api/shared"
+	so "github.com/Microland/go-win64api/shared"
 )
 
 var (
