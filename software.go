@@ -4,7 +4,7 @@ package winapi
 import (
 	"fmt"
 	"golang.org/x/sys/windows/registry"
-"strconv"
+
 	so "github.com/iamacarpet/go-win64api/shared"
 )
 
@@ -42,28 +42,55 @@ func getSoftwareList(baseKey string, arch string) ([]so.Software, error) {
 
 			dn, _, err := sk.GetStringValue("DisplayName")
 		  if err == nil {
-			swv := so.Software{DisplayName: dn, Arch: arch}
+			swv := so.Software{R_DisplayName: dn, R_Arch: arch}
 
 			dv, _, err := sk.GetStringValue("DisplayVersion")
 			if err == nil {
-				swv.DisplayVersion = dv
+				swv.R_DisplayVersion = dv
 			}
 
 			pub, _, err := sk.GetStringValue("Publisher")
 			if err == nil {
-				swv.Pub = pub
+				swv.R_Pub = pub
 			}
 
 			id, _, err := sk.GetStringValue("InstallDate")
 			if err == nil {
-				swv.InsDate = id
+				swv.R_InsDate = id
 			}
 
 			es, _, err := sk.GetIntegerValue("EstimatedSize")
 			if err == nil {
-				 t := strconv.Itoa(int(es))
-				swv.ESize = t
+				swv.R_ESize = es
 			}
+
+			cont, _, err := sk.GetStringValue("Contact")
+			if err == nil {
+				swv.R_Contact = cont
+			}
+
+			hlp, _, err := sk.GetStringValue("HelpLink")
+			if err == nil {
+				swv.R_HelpLink = hlp
+			}
+
+			isource, _, err := sk.GetStringValue("InstallSource")
+			if err == nil {
+				swv.R_InstallSource = isource
+			}
+
+			mver, _, err := sk.GetIntegerValue("VersionMajor")
+			if err == nil {
+				swv.R_VersionMajor = mver
+			}
+
+			mnver, _, err := sk.GetIntegerValue("VersionMinor")
+			if err == nil {
+					swv.R_VersionMinor = mnver
+			}
+
+
+
 				//fmt.Errorf("Error reading subkey list from registry: %s", err.Error())
 
 
