@@ -59,6 +59,11 @@ func getSoftwareList(baseKey string, arch string) ([]so.Software, error) {
 				swv.InsDate = id
 			}
 
+			es, _, err := sk.GetIntegerValue("EstimatedSize")
+			if err == nil {
+				swv.ESize = es
+			}
+				//fmt.Errorf("Error reading subkey list from registry: %s", err.Error())
 
 
 			swList = append(swList, swv)

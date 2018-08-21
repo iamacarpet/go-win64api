@@ -10,6 +10,7 @@ type Software struct {
     Arch                string      `json:"arch"`
     Pub 		string      `json:"publisher"`
     InsDate 		string	    `json:"installDate"`
+    ESize               uint64      `json:"estimatedSize"`
 }
 
 func (s *Software) Name() (string) {
@@ -30,4 +31,8 @@ func (s *Software) Publisher() (string) {
 
 func (s *Software) InstallDate() (string) {
     return s.InsDate
+}
+
+func (s *Software) EstimatedSize() (uint64) {
+    return s.ESize
 }
