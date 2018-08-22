@@ -1,6 +1,6 @@
 // +build windows,amd64
 
-package win64api
+package winapi
 
 import (
 	"fmt"
@@ -60,6 +60,7 @@ func LocalGroupAdd(name, comment string) (bool, error) {
 	return true, nil
 }
 
+// ListLocalGroups enumerates the local groups defined on the system.
 func ListLocalGroups() ([]so.LocalGroup, error) {
 	var (
 		dataPointer  uintptr
@@ -67,7 +68,7 @@ func ListLocalGroups() ([]so.LocalGroup, error) {
 		entriesRead  uint32
 		entriesTotal uint32
 		sizeTest     LOCALGROUP_INFO_1
-		retVal       []so.LocalGroup = make([]so.LocalGroup, 0)
+		retVal       = make([]so.LocalGroup, 0)
 	)
 
 	ret, _, _ := usrNetLocalGroupEnum.Call(
@@ -80,15 +81,15 @@ func ListLocalGroups() ([]so.LocalGroup, error) {
 		uintptr(unsafe.Pointer(&resumeHandle)),
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return nil, fmt.Errorf("Error enumerating groups: status=%d", ret)
+		return nil, fmt.Errorf("error enumerating groups: status=%d", ret)
 	} else if dataPointer == uintptr(0) {
-		return nil, fmt.Errorf("Null pointer while fetching entry.")
+		return nil, fmt.Errorf("null pointer while fetching entry")
 	}
 	defer usrNetApiBufferFree.Call(dataPointer)
 
-	var iter uintptr = dataPointer
+	var iter = dataPointer
 	for i := uint32(0); i < entriesRead; i++ {
-		var data *LOCALGROUP_INFO_1 = (*LOCALGROUP_INFO_1)(unsafe.Pointer(iter))
+		var data = (*LOCALGROUP_INFO_1)(unsafe.Pointer(iter))
 
 		gd := so.LocalGroup{
 			Name:    UTF16toString(data.Lgrpi1_name),
@@ -102,6 +103,7 @@ func ListLocalGroups() ([]so.LocalGroup, error) {
 	return retVal, nil
 }
 
+// LocalGroupDel deletes the specified local group.
 func LocalGroupDel(name string) (bool, error) {
 	namePtr, err := syscall.UTF16PtrFromString(name)
 	if err != nil {
@@ -146,9 +148,7 @@ func localGroupModMembers(proc *syscall.LazyProc, groupname string, usernames []
 	if len(memberInfos) == 0 {
 		// Add a fake entry just so that the slice isn't empty, so we can take
 		// the address of the first entry
-		memberInfos = append(LOCALGROUP_MEMBERS_INFO_3{
-			Lgrmi3_domainandname: "FakeUser",
-		})
+		memberInfos = append(memberInfos, LOCALGROUP_MEMBERS_INFO_3{})
 	}
 
 	ret, _, _ := proc.Call(
@@ -165,25 +165,32 @@ func localGroupModMembers(proc *syscall.LazyProc, groupname string, usernames []
 	return true, nil
 }
 
+// LocalGroupSetMembers sets the membership of the group to contain exactly the
+// set of users specified in usernames.
 func LocalGroupSetMembers(groupname string, usernames []string) (bool, error) {
 	return localGroupModMembers(usrNetLocalGroupSetMembers, groupname, usernames)
 }
 
+// LocalGroupAddMembers adds the specified members to the group, if they are not
+// already members.
 func LocalGroupAddMembers(groupname string, usernames []string) (bool, error) {
 	return localGroupModMembers(usrNetLocalGroupAddMembers, groupname, usernames)
 }
 
+// LocalGroupDelMembers removes the specified members from the local group.
 func LocalGroupDelMembers(groupname string, usernames []string) (bool, error) {
 	return localGroupModMembers(usrNetLocalGroupDelMembers, groupname, usernames)
 }
 
+// LocalGroupGetMembers returns information about the members of the specified
+// local group.
 func LocalGroupGetMembers(groupname string) ([]so.LocalGroupMember, error) {
 	var (
 		dataPointer  uintptr
 		resumeHandle uintptr
 		entriesRead  uint32
 		entriesTotal uint32
-		sizeTest     LOCALGROUP_MEMBER_INFO_3
+		sizeTest     LOCALGROUP_MEMBERS_INFO_3
 		retVal       []so.LocalGroupMember = make([]so.LocalGroupMember, 0)
 	)
 
@@ -196,22 +203,22 @@ func LocalGroupGetMembers(groupname string) ([]so.LocalGroupMember, error) {
 		uintptr(0),                                 // servername
 		uintptr(unsafe.Pointer(groupnamePtr)),      // group name
 		uintptr(3),                                 // level, LOCALGROUP_MEMBERS_INFO_3
-		uintptr(&dataPointer),                      // bufptr
+		uintptr(unsafe.Pointer(&dataPointer)),      // bufptr
 		uintptr(uint32(USER_MAX_PREFERRED_LENGTH)), // prefmaxlen
 		uintptr(unsafe.Pointer(&entriesRead)),      // entriesread
 		uintptr(unsafe.Pointer(&entriesTotal)),     // totalentries
 		uintptr(unsafe.Pointer(&resumeHandle)),     // resumehandle
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return nil, fmt.Errorf("Error enumerating groups members: status=%d", ret)
+		return nil, fmt.Errorf("error enumerating groups members: status=%d", ret)
 	} else if dataPointer == uintptr(0) {
-		return nil, fmt.Errorf("Null pointer while fetching entry.")
+		return nil, fmt.Errorf("null pointer while fetching entry")
 	}
-	defer usrNetApiBufferFree(dataPointer)
+	defer usrNetApiBufferFree.Call(dataPointer)
 
-	var iter uintptr = dataPointer
+	var iter = dataPointer
 	for i := uint32(0); i < entriesRead; i++ {
-		var data *LOCALGROUP_MEMBER_INFO_3 = (*LOCALGROUP_MEMBER_INFO_3)(unsafe.Pointer(iter))
+		var data = (*LOCALGROUP_MEMBERS_INFO_3)(unsafe.Pointer(iter))
 
 		domainAndUsername := UTF16toString(data.Lgrmi3_domainandname)
 		split := strings.SplitN(domainAndUsername, "\\", 1)

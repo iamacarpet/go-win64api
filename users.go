@@ -136,12 +136,15 @@ type UserAddOptions struct {
 
 	// Optional
 	FullName   string
-	PrivLevel  int
+	PrivLevel  uint32
 	HomeDir    string
 	Comment    string
 	ScriptPath string
 }
 
+// UserAddEx creates a new user account.
+// As opposed to the simpler UserAdd, UserAddEx allows specification of full
+// level 1 information while creating a user.
 func UserAddEx(opts UserAddOptions) (bool, error) {
 	var parmErr uint32
 	var err error
@@ -197,15 +200,19 @@ func UserAddEx(opts UserAddOptions) (bool, error) {
 	return AddGroupMembership(opts.Username, "Users")
 }
 
+// UserAdd creates a new user account with the given username, full name, and
+// password.
+// The new account will have the standard User privilege level.
 func UserAdd(username string, fullname string, password string) (bool, error) {
 	return UserAddEx(UserAddOptions{
 		Username:  username,
 		Password:  password,
 		FullName:  fullname,
-		PrivLevel: USER_PRIV_USER_,
+		PrivLevel: USER_PRIV_USER,
 	})
 }
 
+// UserDelete deletes the user with the given username.
 func UserDelete(username string) (bool, error) {
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
@@ -221,11 +228,13 @@ func UserDelete(username string) (bool, error) {
 	return true, nil
 }
 
+// IsLocalUserAdmin returns whether the user with the specified user name has
+// administration rights on the local machine.
 func IsLocalUserAdmin(username string) (bool, error) {
 	var dataPointer uintptr
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
-		return false, fmt.Errorf("Unable to encode username to UTF16")
+		return false, fmt.Errorf("unable to encode username to UTF16")
 	}
 	_, _, _ = usrNetUserGetInfo.Call(
 		uintptr(0),                            // servername
@@ -233,13 +242,13 @@ func IsLocalUserAdmin(username string) (bool, error) {
 		uintptr(uint32(1)),                    // level, request USER_INFO_1
 		uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
 	)
-	defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dataPointer)))
+	defer usrNetApiBufferFree.Call(dataPointer)
 
 	if dataPointer == uintptr(0) {
-		return false, fmt.Errorf("Unable to get data structure.")
+		return false, fmt.Errorf("unable to get data structure")
 	}
 
-	var data *USER_INFO_1 = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
+	var data = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
 
 	if data.Usri1_priv == USER_PRIV_ADMIN {
 		return true, nil
@@ -248,16 +257,18 @@ func IsLocalUserAdmin(username string) (bool, error) {
 	}
 }
 
+// IsDomainUserAdmin returns whether the specified user is an administrator for
+// the specified domain.
 func IsDomainUserAdmin(username string, domain string) (bool, error) {
 	var dataPointer uintptr
 	var dcPointer uintptr
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
-		return false, fmt.Errorf("Unable to encode username to UTF16")
+		return false, fmt.Errorf("unable to encode username to UTF16")
 	}
 	dPointer, err := syscall.UTF16PtrFromString(domain)
 	if err != nil {
-		return false, fmt.Errorf("Unable to encode domain to UTF16")
+		return false, fmt.Errorf("unable to encode domain to UTF16")
 	}
 
 	_, _, _ = usrNetGetAnyDCName.Call(
@@ -265,7 +276,7 @@ func IsDomainUserAdmin(username string, domain string) (bool, error) {
 		uintptr(unsafe.Pointer(dPointer)), // domainame
 		uintptr(unsafe.Pointer(&dcPointer)),
 	)
-	defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dcPointer)))
+	defer usrNetApiBufferFree.Call(dcPointer)
 
 	_, _, _ = usrNetUserGetInfo.Call(
 		uintptr(dcPointer),                    // servername
@@ -273,13 +284,13 @@ func IsDomainUserAdmin(username string, domain string) (bool, error) {
 		uintptr(uint32(1)),                    // level, request USER_INFO_1
 		uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
 	)
-	defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dataPointer)))
+	defer usrNetApiBufferFree.Call(dataPointer)
 
 	if dataPointer == uintptr(0) {
-		return false, fmt.Errorf("Unable to get data structure.")
+		return false, fmt.Errorf("unable to get data structure")
 	}
 
-	var data *USER_INFO_1 = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
+	var data = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
 
 	if data.Usri1_priv == USER_PRIV_ADMIN {
 		return true, nil
@@ -288,6 +299,7 @@ func IsDomainUserAdmin(username string, domain string) (bool, error) {
 	}
 }
 
+// ListLocalUsers lists information about local user accounts.
 func ListLocalUsers() ([]so.LocalUser, error) {
 	var (
 		dataPointer  uintptr
@@ -295,7 +307,7 @@ func ListLocalUsers() ([]so.LocalUser, error) {
 		entriesRead  uint32
 		entriesTotal uint32
 		sizeTest     USER_INFO_2
-		retVal       []so.LocalUser = make([]so.LocalUser, 0)
+		retVal       = make([]so.LocalUser, 0)
 	)
 
 	ret, _, _ := usrNetUserEnum.Call(
@@ -309,14 +321,14 @@ func ListLocalUsers() ([]so.LocalUser, error) {
 		uintptr(unsafe.Pointer(&resumeHandle)),
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return nil, fmt.Errorf("Error fetching user entry.")
+		return nil, fmt.Errorf("error fetching user entry")
 	} else if dataPointer == uintptr(0) {
-		return nil, fmt.Errorf("Null pointer while fetching entry.")
+		return nil, fmt.Errorf("null pointer while fetching entry")
 	}
 
-	var iter uintptr = dataPointer
+	var iter = dataPointer
 	for i := uint32(0); i < entriesRead; i++ {
-		var data *USER_INFO_2 = (*USER_INFO_2)(unsafe.Pointer(iter))
+		var data = (*USER_INFO_2)(unsafe.Pointer(iter))
 
 		ud := so.LocalUser{
 			Username:         UTF16toString(data.Usri2_name),
@@ -347,10 +359,11 @@ func ListLocalUsers() ([]so.LocalUser, error) {
 
 		iter = uintptr(unsafe.Pointer(iter + unsafe.Sizeof(sizeTest)))
 	}
-	_, _, _ = usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dataPointer)))
+	usrNetApiBufferFree.Call(dataPointer)
 	return retVal, nil
 }
 
+// AddGroupMembership adds the user as a member of the specified group.
 func AddGroupMembership(username, groupname string) (bool, error) {
 	hn, _ := os.Hostname()
 	uPointer, err := syscall.UTF16PtrFromString(hn + `\` + username)
@@ -359,9 +372,9 @@ func AddGroupMembership(username, groupname string) (bool, error) {
 	}
 	gPointer, err := syscall.UTF16PtrFromString(groupname)
 	if err != nil {
-		return false, fmt.Errorf("Unable to encode group name to UTF16")
+		return false, fmt.Errorf("unable to encode group name to UTF16")
 	}
-	var uArray []LOCALGROUP_MEMBERS_INFO_3 = make([]LOCALGROUP_MEMBERS_INFO_3, 1)
+	var uArray = make([]LOCALGROUP_MEMBERS_INFO_3, 1)
 	uArray[0] = LOCALGROUP_MEMBERS_INFO_3{
 		Lgrmi3_domainandname: uPointer,
 	}
@@ -373,22 +386,23 @@ func AddGroupMembership(username, groupname string) (bool, error) {
 		uintptr(uint32(len(uArray))),
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return false, fmt.Errorf("Unable to process. %d", ret)
+		return false, fmt.Errorf("unable to process. %d", ret)
 	}
 	return true, nil
 }
 
+// RemoveGroupMembership removes the user from the specified group.
 func RemoveGroupMembership(username, groupname string) (bool, error) {
 	hn, _ := os.Hostname()
 	uPointer, err := syscall.UTF16PtrFromString(hn + `\` + username)
 	if err != nil {
-		return false, fmt.Errorf("Unable to encode username to UTF16")
+		return false, fmt.Errorf("unable to encode username to UTF16")
 	}
 	gPointer, err := syscall.UTF16PtrFromString(groupname)
 	if err != nil {
-		return false, fmt.Errorf("Unable to encode group name to UTF16")
+		return false, fmt.Errorf("unable to encode group name to UTF16")
 	}
-	var uArray []LOCALGROUP_MEMBERS_INFO_3 = make([]LOCALGROUP_MEMBERS_INFO_3, 1)
+	var uArray = make([]LOCALGROUP_MEMBERS_INFO_3, 1)
 	uArray[0] = LOCALGROUP_MEMBERS_INFO_3{
 		Lgrmi3_domainandname: uPointer,
 	}
@@ -400,28 +414,31 @@ func RemoveGroupMembership(username, groupname string) (bool, error) {
 		uintptr(uint32(len(uArray))),
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return false, fmt.Errorf("Unable to process. %d", ret)
+		return false, fmt.Errorf("unable to process. %d", ret)
 	}
 	return true, nil
 }
 
+// SetAdmin adds the user to the "Administrators" group.
 func SetAdmin(username string) (bool, error) {
 	return AddGroupMembership(username, "Administrators")
 }
 
+// RevokeAdmin removes the user from the "Administrators" group.
 func RevokeAdmin(username string) (bool, error) {
 	return RemoveGroupMembership(username, "Administrators")
 }
 
+// UserUpdateFullName changes the full name attached to the user's account.
 func UserUpdateFullname(username string, fullname string) (bool, error) {
 	var errParam uint32
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
-		return false, fmt.Errorf("Unable to encode username to UTF16")
+		return false, fmt.Errorf("unable to encode username to UTF16")
 	}
 	fPointer, err := syscall.UTF16PtrFromString(fullname)
 	if err != nil {
-		return false, fmt.Errorf("Unable to encode full name to UTF16")
+		return false, fmt.Errorf("unable to encode full name to UTF16")
 	}
 	ret, _, _ := usrNetUserSetInfo.Call(
 		uintptr(0),                        // servername
@@ -431,11 +448,12 @@ func UserUpdateFullname(username string, fullname string) (bool, error) {
 		uintptr(unsafe.Pointer(&errParam)),
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return false, fmt.Errorf("Unable to process. %d", ret)
+		return false, fmt.Errorf("unable to process. %d", ret)
 	}
 	return true, nil
 }
 
+// ChangePassword changes the user's password.
 func ChangePassword(username string, password string) (bool, error) {
 	var errParam uint32
 	uPointer, err := syscall.UTF16PtrFromString(username)
@@ -459,6 +477,10 @@ func ChangePassword(username string, password string) (bool, error) {
 	return true, nil
 }
 
+// UserDisabled adds or removes the flag that disables a user's account, preventing
+// them from logging in.
+// If disable is true, the user's account is disabled.
+// If disable is false, the user's account is enabled.
 func UserDisabled(username string, disable bool) (bool, error) {
 	if disable {
 		return userAddFlags(username, USER_UF_ACCOUNTDISABLE)
@@ -467,6 +489,11 @@ func UserDisabled(username string, disable bool) (bool, error) {
 	}
 }
 
+// UserPasswordNoExpires adds or removes the flag that determines whether the
+// user's password expires.
+// If noexpire is true, the user's password will not expire.
+// If noexpire is false, the user's password will expire according to the system's
+// password policy.
 func UserPasswordNoExpires(username string, noexpire bool) (bool, error) {
 	if noexpire {
 		return userAddFlags(username, USER_UF_DONT_EXPIRE_PASSWD)
@@ -475,6 +502,10 @@ func UserPasswordNoExpires(username string, noexpire bool) (bool, error) {
 	}
 }
 
+// UserDisablePasswordChange adds or removes the flag that determines whether the
+// user is allowed to change their own password.
+// If disabled is true, the user will be unable to change their own password.
+// If disabled is false, the user will be allowed to change their own password.
 func UserDisablePasswordChange(username string, disabled bool) (bool, error) {
 	if disabled {
 		return userAddFlags(username, USER_UF_PASSWD_CANT_CHANGE)
@@ -487,7 +518,7 @@ func userGetFlags(username string) (uint32, error) {
 	var dataPointer uintptr
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
-		return 0, fmt.Errorf("Unable to encode username to UTF16")
+		return 0, fmt.Errorf("unable to encode username to UTF16")
 	}
 	_, _, _ = usrNetUserGetInfo.Call(
 		uintptr(0),                            // servername
@@ -495,15 +526,15 @@ func userGetFlags(username string) (uint32, error) {
 		uintptr(uint32(1)),                    // level, request USER_INFO_1
 		uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
 	)
-	defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dataPointer)))
+	defer usrNetApiBufferFree.Call(dataPointer)
 
 	if dataPointer == uintptr(0) {
-		return 0, fmt.Errorf("Unable to get data structure.")
+		return 0, fmt.Errorf("unable to get data structure")
 	}
 
-	var data *USER_INFO_1 = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
+	var data = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
 
-	fmt.Printf("Existing user flags: %d\r\n", data.Usri1_flags)
+	fmt.Printf("existing user flags: %d\r\n", data.Usri1_flags)
 	return data.Usri1_flags, nil
 }
 
@@ -544,6 +575,7 @@ func userDelFlags(username string, flags uint32) (bool, error) {
 	return userSetFlags(username, eFlags)
 }
 
+// UTF16toString converts a pointer to a UTF16 string into a Go string.
 func UTF16toString(p *uint16) string {
 	return syscall.UTF16ToString((*[4096]uint16)(unsafe.Pointer(p))[:])
 }
