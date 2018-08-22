@@ -118,7 +118,7 @@ func LocalGroupDel(name string) (bool, error) {
 	return true, nil
 }
 
-func LocalGroupSetMembers(groupname string, usernames []string) (bool, error) {
+func localGroupModMembers(proc *syscall.LazyProc, groupname string, usernames []string) (bool, error) {
 	memberInfos := make([]LOCALGROUP_MEMBERS_INFO_3, 0, len(usernames))
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -151,7 +151,7 @@ func LocalGroupSetMembers(groupname string, usernames []string) (bool, error) {
 		})
 	}
 
-	ret, _, _ := usrNetLocalGroupSetMembers.Call(
+	ret, _, _ := proc.Call(
 		uintptr(0),                            // servername
 		uintptr(unsafe.Pointer(groupnamePtr)), // group name
 		uintptr(3),                            // level, LOCALGROUP_MEMBERS_INFO_3
@@ -159,10 +159,22 @@ func LocalGroupSetMembers(groupname string, usernames []string) (bool, error) {
 		uintptr(len(usernames)),                  // totalEntries
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return false, fmt.Errorf("Failed to set group members: status=%d", ret)
+		return false, fmt.Errorf("Failed to modify group members: status=%d", ret)
 	}
 
 	return true, nil
+}
+
+func LocalGroupSetMembers(groupname string, usernames []string) (bool, error) {
+	return localGroupModMembers(usrNetLocalGroupSetMembers, groupname, usernames)
+}
+
+func LocalGroupAddMembers(groupname string, usernames []string) (bool, error) {
+	return localGroupModMembers(usrNetLocalGroupAddMembers, groupname, usernames)
+}
+
+func LocalGroupDelMembers(groupname string, usernames []string) (bool, error) {
+	return localGroupModMembers(usrNetLocalGroupDelMembers, groupname, usernames)
 }
 
 func LocalGroupGetMembers(groupname string) ([]so.LocalGroupMember, error) {
