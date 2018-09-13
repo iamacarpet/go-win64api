@@ -4,6 +4,7 @@ package winapi
 
 import (
 	"fmt"
+	"runtime"
 
 	ole "github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
@@ -15,7 +16,10 @@ const (
 )
 
 func FirewallRuleCreate(name, description, group, appPath, port string, protocol uint) (bool, error) {
-	ole.CoInitialize(0)
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
 	defer ole.CoUninitialize()
 
 	unknown, err := oleutil.CreateObject("HNetCfg.FwPolicy2")
