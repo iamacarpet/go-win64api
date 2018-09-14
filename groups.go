@@ -20,6 +20,19 @@ var (
 	usrNetLocalGroupGetMembers = modNetapi32.NewProc("NetLocalGroupGetMembers")
 )
 
+// Possible errors returned by local group management functions
+// Error code enumerations taken from MS-ERREF documentation:
+// https://msdn.microsoft.com/en-us/library/cc231196.aspx
+const (
+	NERR_GroupNotFound syscall.Errno = 2220 // 0x000008AC
+
+	ERROR_ACCESS_DENIED       syscall.Errno = 5    // 0x00000005
+	ERROR_MEMBER_NOT_IN_ALIAS syscall.Errno = 1377 // 0x00000561
+	ERROR_MEMBER_IN_ALIAS     syscall.Errno = 1378 // 0x00000562
+	ERROR_NO_SUCH_MEMBER      syscall.Errno = 1387 // 0x0000056B
+	ERROR_INVALID_MEMBER      syscall.Errno = 1388 // 0x0000056C
+)
+
 // LOCALGROUP_INFO_0 represents level 0 information about local Windows groups.
 // This struct matches the struct definition in the Windows headers (lmaccess.h).
 type LOCALGROUP_INFO_0 struct {
@@ -55,12 +68,16 @@ func LocalGroupAdd(name, comment string) (bool, error) {
 		uintptr(unsafe.Pointer(&parmErr)), // error code out param
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return false, fmt.Errorf("Unable to process: status=%d error=%d", ret, parmErr)
+		return false, syscall.Errno(ret)
 	}
 	return true, nil
 }
 
 // ListLocalGroups enumerates the local groups defined on the system.
+//
+// If an error occurs in the call to the underlying NetLocalGroupEnum function, the
+// returned error will be a syscall.Errno containing the error code.
+// See: https://docs.microsoft.com/en-us/windows/desktop/api/lmaccess/nf-lmaccess-netlocalgroupenum
 func ListLocalGroups() ([]so.LocalGroup, error) {
 	var (
 		dataPointer  uintptr
@@ -81,7 +98,7 @@ func ListLocalGroups() ([]so.LocalGroup, error) {
 		uintptr(unsafe.Pointer(&resumeHandle)),
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return nil, fmt.Errorf("error enumerating groups: status=%d", ret)
+		return nil, syscall.Errno(ret)
 	} else if dataPointer == uintptr(0) {
 		return nil, fmt.Errorf("null pointer while fetching entry")
 	}
@@ -104,6 +121,10 @@ func ListLocalGroups() ([]so.LocalGroup, error) {
 }
 
 // LocalGroupDel deletes the specified local group.
+//
+// If an error occurs in the call to the underlying NetLocalGroupDel function, the
+// returned error will be a syscall.Errno containing the error code.
+// See: https://docs.microsoft.com/en-us/windows/desktop/api/lmaccess/nf-lmaccess-netlocalgroupdel
 func LocalGroupDel(name string) (bool, error) {
 	namePtr, err := syscall.UTF16PtrFromString(name)
 	if err != nil {
@@ -115,7 +136,7 @@ func LocalGroupDel(name string) (bool, error) {
 		uintptr(unsafe.Pointer(namePtr)),
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return false, fmt.Errorf("Unable to delete group: status=%d", ret)
+		return false, syscall.Errno(ret)
 	}
 	return true, nil
 }
@@ -152,14 +173,14 @@ func localGroupModMembers(proc *syscall.LazyProc, groupname string, usernames []
 	}
 
 	ret, _, _ := proc.Call(
-		uintptr(0),                            // servername
-		uintptr(unsafe.Pointer(groupnamePtr)), // group name
-		uintptr(3),                            // level, LOCALGROUP_MEMBERS_INFO_3
+		uintptr(0),                               // servername
+		uintptr(unsafe.Pointer(groupnamePtr)),    // group name
+		uintptr(3),                               // level, LOCALGROUP_MEMBERS_INFO_3
 		uintptr(unsafe.Pointer(&memberInfos[0])), // buf
 		uintptr(len(usernames)),                  // totalEntries
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return false, fmt.Errorf("Failed to modify group members: status=%d", ret)
+		return false, syscall.Errno(ret)
 	}
 
 	return true, nil
@@ -167,23 +188,39 @@ func localGroupModMembers(proc *syscall.LazyProc, groupname string, usernames []
 
 // LocalGroupSetMembers sets the membership of the group to contain exactly the
 // set of users specified in usernames.
+//
+// If an error occurs in the call to the underlying NetLocalGroupSetMembers function, the
+// returned error will be a syscall.Errno containing the error code.
+// See: https://docs.microsoft.com/en-us/windows/desktop/api/lmaccess/nf-lmaccess-netlocalgroupsetmembers
 func LocalGroupSetMembers(groupname string, usernames []string) (bool, error) {
 	return localGroupModMembers(usrNetLocalGroupSetMembers, groupname, usernames)
 }
 
 // LocalGroupAddMembers adds the specified members to the group, if they are not
 // already members.
+//
+// If an error occurs in the call to the underlying NetLocalGroupAddMembers function, the
+// returned error will be a syscall.Errno containing the error code.
+// See: https://docs.microsoft.com/en-us/windows/desktop/api/lmaccess/nf-lmaccess-netlocalgroupaddmembers
 func LocalGroupAddMembers(groupname string, usernames []string) (bool, error) {
 	return localGroupModMembers(usrNetLocalGroupAddMembers, groupname, usernames)
 }
 
 // LocalGroupDelMembers removes the specified members from the local group.
+//
+// If an error occurs in the call to the underlying NetLocalGroupDelMembers function, the
+// returned error will be a syscall.Errno containing the error code.
+// See: https://docs.microsoft.com/en-us/windows/desktop/api/lmaccess/nf-lmaccess-netlocalgroupdelmembers
 func LocalGroupDelMembers(groupname string, usernames []string) (bool, error) {
 	return localGroupModMembers(usrNetLocalGroupDelMembers, groupname, usernames)
 }
 
 // LocalGroupGetMembers returns information about the members of the specified
 // local group.
+//
+// If an error occurs in the call to the underlying NetLocalGroupGetMembers function, the
+// returned error will be a syscall.Errno containing the error code.
+// See: https://docs.microsoft.com/en-us/windows/desktop/api/lmaccess/nf-lmaccess-netlocalgroupgetmembers
 func LocalGroupGetMembers(groupname string) ([]so.LocalGroupMember, error) {
 	var (
 		dataPointer  uintptr
@@ -210,7 +247,7 @@ func LocalGroupGetMembers(groupname string) ([]so.LocalGroupMember, error) {
 		uintptr(unsafe.Pointer(&resumeHandle)),     // resumehandle
 	)
 	if ret != NET_API_STATUS_NERR_Success {
-		return nil, fmt.Errorf("error enumerating groups members: status=%d", ret)
+		return nil, syscall.Errno(ret)
 	} else if dataPointer == uintptr(0) {
 		return nil, fmt.Errorf("null pointer while fetching entry")
 	}
