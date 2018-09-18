@@ -110,6 +110,14 @@ type USER_INFO_1011 struct {
 	Usri1011_full_name *uint16
 }
 
+// USER_INFO_1052 is the Go representation of the Windwos _USER_INFO_1052 struct
+// used to set a user's profile directory.
+//
+// See: https://docs.microsoft.com/en-us/windows/desktop/api/lmaccess/ns-lmaccess-_user_info_1052
+type USER_INFO_1052 struct {
+	Useri1052_profile *uint16
+}
+
 type LOCALGROUP_MEMBERS_INFO_3 struct {
 	Lgrmi3_domainandname *uint16
 }
@@ -311,8 +319,8 @@ func ListLocalUsers() ([]so.LocalUser, error) {
 	)
 
 	ret, _, _ := usrNetUserEnum.Call(
-		uintptr(0),                                  // servername
-		uintptr(uint32(2)),                          // level, USER_INFO_2
+		uintptr(0),         // servername
+		uintptr(uint32(2)), // level, USER_INFO_2
 		uintptr(uint32(USER_FILTER_NORMAL_ACCOUNT)), // filter, only "normal" accounts.
 		uintptr(unsafe.Pointer(&dataPointer)),       // struct buffer for output data.
 		uintptr(uint32(USER_MAX_PREFERRED_LENGTH)),  // allow as much memory as required.
@@ -573,6 +581,31 @@ func userDelFlags(username string, flags uint32) (bool, error) {
 	}
 	eFlags &^= flags // clear bits we want to remove.
 	return userSetFlags(username, eFlags)
+}
+
+// UserSetProfile sets the profile path for the user to path.
+func UserSetProfile(username string, path string) (bool, error) {
+	var errParam uint32
+	uPointer, err := syscall.UTF16PtrFromString(username)
+	if err != nil {
+		return false, fmt.Errorf("Unable to encode username to UTF16: %v", err)
+	}
+	pathPointer, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return false, fmt.Errorf("Unable to encode path to UTF16: %v", err)
+	}
+
+	ret, _, _ := usrNetUserSetInfo.Call(
+		uintptr(0),                        // servername
+		uintptr(unsafe.Pointer(uPointer)), // username
+		uintptr(uint32(1052)),             // level
+		uintptr(unsafe.Pointer(&USER_INFO_1052{Useri1052_profile: pathPointer})),
+		uintptr(unsafe.Pointer(&errParam)),
+	)
+	if ret != NET_API_STATUS_NERR_Success {
+		return false, syscall.Errno(ret)
+	}
+	return true, nil
 }
 
 // UTF16toString converts a pointer to a UTF16 string into a Go string.
