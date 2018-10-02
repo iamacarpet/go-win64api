@@ -240,8 +240,8 @@ func ListLocalUsers() ([]so.LocalUser, error) {
 	)
 
 	ret, _, _ := usrNetUserEnum.Call(
-		uintptr(0),                                  // servername
-		uintptr(uint32(2)),                          // level, USER_INFO_2
+		uintptr(0),         // servername
+		uintptr(uint32(2)), // level, USER_INFO_2
 		uintptr(uint32(USER_FILTER_NORMAL_ACCOUNT)), // filter, only "normal" accounts.
 		uintptr(unsafe.Pointer(&dataPointer)),       // struct buffer for output data.
 		uintptr(uint32(USER_MAX_PREFERRED_LENGTH)),  // allow as much memory as required.
@@ -487,4 +487,48 @@ func userDelFlags(username string, flags uint32) (bool, error) {
 
 func UTF16toString(p *uint16) string {
 	return syscall.UTF16ToString((*[4096]uint16)(unsafe.Pointer(p))[:])
+}
+
+func DomainUserLocked(username string, domain string) (bool, error) {
+	var dataPointer uintptr
+	var dcPointer uintptr
+	var servername uintptr
+
+	uPointer, err := syscall.UTF16PtrFromString(username)
+	if err != nil {
+		return false, fmt.Errorf("Unable to encode username to UTF16")
+	}
+
+	if domain != "" {
+		dPointer, err := syscall.UTF16PtrFromString(domain)
+		if err != nil {
+			return false, fmt.Errorf("Unable to encode domain to UTF16")
+		}
+
+		_, _, _ = usrNetGetAnyDCName.Call(
+			uintptr(0),                        // servername
+			uintptr(unsafe.Pointer(dPointer)), // domainame
+			uintptr(unsafe.Pointer(&dcPointer)),
+		)
+		servername = uintptr(dcPointer)
+		defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dcPointer)))
+	} else {
+		servername = uintptr(0)
+	}
+
+	_, _, _ = usrNetUserGetInfo.Call(
+		servername,                            // servername
+		uintptr(unsafe.Pointer(uPointer)),     // username
+		uintptr(uint32(2)),                    // level, request USER_INFO_2
+		uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
+	)
+	defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dataPointer)))
+
+	if dataPointer == uintptr(0) {
+		return false, fmt.Errorf("Unable to get data structure.")
+	}
+
+	data := (*USER_INFO_2)(unsafe.Pointer(dataPointer))
+
+	return (data.Usri2_flags & USER_UF_LOCKOUT) == USER_UF_LOCKOUT, nil
 }
