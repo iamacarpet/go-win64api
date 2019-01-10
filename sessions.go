@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	so "github.com/iamacarpet/go-win64api/shared"
+	so "github.com/fvitan/go-win64api/shared"
 )
 
 var (
@@ -96,6 +96,7 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
 									Username:   strings.ToLower(LsatoString(data.UserName)),
 									Domain:     strLogonDomain,
 									LocalAdmin: isAdmin,
+									LogonType:  data.LogonType,
 								}
 								hn, _ := os.Hostname()
 								if strings.ToUpper(ud.Domain) == strings.ToUpper(hn) {
