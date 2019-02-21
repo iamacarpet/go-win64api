@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	so "github.com/iamacarpet/go-win64api/shared"
@@ -92,7 +93,7 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
 									LocalAdmin:    isAdmin,
 									LogonType:     data.LogonType,
 									DnsDomainName: LsatoString(data.DnsDomainName),
-									LogonTime:     data.LogonTime,
+									LogonTime:     uint64TimestampToTime(data.LogonTime),
 								}
 								hn, _ := os.Hostname()
 								if strings.ToUpper(ud.Domain) == strings.ToUpper(hn) {
@@ -118,6 +119,15 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
 	}
 
 	return uSessList, nil
+}
+
+func uint64TimestampToTime(nsec uint64) time.Time {
+	// change starting time to the Epoch (00:00:00 UTC, January 1, 1970)
+	nsec -= 116444736000000000
+	// convert into nanoseconds
+	nsec *= 100
+
+	return time.Unix(0, nsec)
 }
 
 func sessUserLUIDs() (map[LUID]string, error) {
