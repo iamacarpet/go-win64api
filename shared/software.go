@@ -1,63 +1,32 @@
 package shared
 
-import (
+import "time"
 
-)
-
+// EstimatedSize is in KB,
+// As estimated & written to the registry by the installer itself,
+// or Windows Installer for an MSI.
 type Software struct {
-    R_DisplayName         string      `json:"displayName"`
-    R_DisplayVersion      string      `json:"displayVersion"`
-    R_Arch                string      `json:"arch"`
-    R_Pub 		            string      `json:"publisher"`
-    R_InsDate 		        string      `json:"installDate"`
-    R_ESize               uint64      `json:"estimatedSize"`
-    R_Contact		          string      `json:"Contact"`
-    R_HelpLink		        string      `json:"HelpLink"`
-    R_InstallSource       string      `json:"InstallSource"`
-    R_VersionMajor        uint64      `json:"VersionMajor"`
-    R_VersionMinor 	      uint64      `json:"VersionMinor"`
+	DisplayName    string    `json:"displayName"`
+	DisplayVersion string    `json:"displayVersion"`
+	Arch           string    `json:"arch"`
+	Publisher      string    `json:"publisher"`
+	InstallDate    time.Time `json:"installDate"`
+	EstimatedSize  uint64    `json:"estimatedSize"`
+	Contact        string    `json:"Contact"`
+	HelpLink       string    `json:"HelpLink"`
+	InstallSource  string    `json:"InstallSource"`
+	VersionMajor   uint64    `json:"VersionMajor"`
+	VersionMinor   uint64    `json:"VersionMinor"`
 }
 
-func (s *Software) Name() (string) {
-    return s.R_DisplayName
+func (s *Software) Name() string {
+	return s.DisplayName
 }
 
-func (s *Software) Version() (string) {
-    return s.R_DisplayVersion
+func (s *Software) Version() string {
+	return s.DisplayVersion
 }
 
-func (s *Software) Architecture() (string) {
-    return s.R_Arch
-}
-
-func (s *Software) Publisher() (string) {
-    return s.R_Pub
-}
-
-func (s *Software) InstallDate() (string) {
-    return s.R_InsDate
-}
-
-func (s *Software) EstimatedSize() (uint64) {
-    return s.R_ESize
-}
-
-func (s *Software) Contact() (string) {
-    return s.R_Contact
-}
-
-func (s *Software) HelpLink() (string) {
-    return s.R_HelpLink
-}
-
-func (s *Software) InstallSource() (string) {
-    return s.R_InstallSource
-}
-
-func (s *Software) VersionMajor() (uint64) {
-    return s.R_VersionMajor
-}
-
-func (s *Software) VersionMinor() (uint64) {
-    return s.R_VersionMinor
+func (s *Software) Architecture() string {
+	return s.Arch
 }
