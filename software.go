@@ -1,11 +1,13 @@
 // +build windows,amd64
+
 package winapi
 
 import (
 	"fmt"
+
 	"golang.org/x/sys/windows/registry"
 
-	so "github.com/iamacarpet/go-win64api/shared"
+	so "github.com/tera-insights/go-win64api/shared"
 )
 
 func InstalledSoftwareList() ([]so.Software, error) {

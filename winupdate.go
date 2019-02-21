@@ -1,4 +1,5 @@
 // +build windows,amd64
+
 package winapi
 
 import (
@@ -8,7 +9,7 @@ import (
 	ole "github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 
-	so "github.com/iamacarpet/go-win64api/shared"
+	so "github.com/tera-insights/go-win64api/shared"
 )
 
 var updateResultStatus []string = []string{
