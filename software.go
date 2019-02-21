@@ -54,7 +54,7 @@ func getSoftwareList(baseKey string, arch string) ([]so.Software, error) {
 
 			pub, _, err := sk.GetStringValue("Publisher")
 			if err == nil {
-				swv.Pub = pub
+				swv.Publisher = pub
 			}
 
 			id, _, err := sk.GetStringValue("InstallDate")
