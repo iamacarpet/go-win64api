@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	so "github.com/iamacarpet/go-win64api/shared"
 	"golang.org/x/sys/windows/registry"
+
+	so "github.com/iamacarpet/go-win64api/shared"
 )
 
 func InstalledSoftwareList() ([]so.Software, error) {
