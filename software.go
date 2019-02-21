@@ -4,6 +4,7 @@ package winapi
 
 import (
 	"fmt"
+	"time"
 
 	"golang.org/x/sys/windows/registry"
 
@@ -49,6 +50,46 @@ func getSoftwareList(baseKey string, arch string) ([]so.Software, error) {
 			dv, _, err := sk.GetStringValue("DisplayVersion")
 			if err == nil {
 				swv.DisplayVersion = dv
+			}
+
+			pub, _, err := sk.GetStringValue("Publisher")
+			if err == nil {
+				swv.Publisher = pub
+			}
+
+			id, _, err := sk.GetStringValue("InstallDate")
+			if err == nil {
+				swv.InstallDate, _ = time.Parse("20060102", id)
+			}
+
+			es, _, err := sk.GetIntegerValue("EstimatedSize")
+			if err == nil {
+				swv.EstimatedSize = es
+			}
+
+			cont, _, err := sk.GetStringValue("Contact")
+			if err == nil {
+				swv.Contact = cont
+			}
+
+			hlp, _, err := sk.GetStringValue("HelpLink")
+			if err == nil {
+				swv.HelpLink = hlp
+			}
+
+			isource, _, err := sk.GetStringValue("InstallSource")
+			if err == nil {
+				swv.InstallSource = isource
+			}
+
+			mver, _, err := sk.GetIntegerValue("VersionMajor")
+			if err == nil {
+				swv.VersionMajor = mver
+			}
+
+			mnver, _, err := sk.GetIntegerValue("VersionMinor")
+			if err == nil {
+				swv.VersionMinor = mnver
 			}
 
 			swList = append(swList, swv)
