@@ -21,12 +21,6 @@ var (
 	sessLsaGetLogonSessionData    = modSecur32.NewProc("LsaGetLogonSessionData")
 )
 
-const (
-	SESS_INTERACTIVE_LOGON        = 2
-	SESS_REMOTE_INTERACTIVE_LOGON = 10
-	SESS_CACHED_INTERACTIVE_LOGON = 11
-)
-
 type LUID struct {
 	LowPart  uint32
 	HighPart int32
@@ -82,8 +76,7 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
 			var data *SECURITY_LOGON_SESSION_DATA = (*SECURITY_LOGON_SESSION_DATA)(unsafe.Pointer(sessionData))
 
 			if data.Sid != uintptr(0) {
-				//fmt.Printf("%s\\%s Type: %d\r\n", strings.ToUpper(LsatoString(data.LogonDomain)), strings.ToLower(LsatoString(data.UserName)), data.LogonType)
-				validTypes := []uint32{SESS_INTERACTIVE_LOGON, SESS_CACHED_INTERACTIVE_LOGON, SESS_REMOTE_INTERACTIVE_LOGON}
+				validTypes := []uint32{so.SESS_INTERACTIVE_LOGON, so.SESS_CACHED_INTERACTIVE_LOGON, so.SESS_REMOTE_INTERACTIVE_LOGON}
 				if in_array(data.LogonType, validTypes) {
 					strLogonDomain := strings.ToUpper(LsatoString(data.LogonDomain))
 					if strLogonDomain != "WINDOW MANAGER" && strLogonDomain != "FONT DRIVER HOST" {
@@ -94,9 +87,12 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
 							if uok, isAdmin := luidinmap(&data.LogonId, &PidLUIDList); uok {
 								uList = append(uList, sUser)
 								ud := so.SessionDetails{
-									Username:   strings.ToLower(LsatoString(data.UserName)),
-									Domain:     strLogonDomain,
-									LocalAdmin: isAdmin,
+									Username:      strings.ToLower(LsatoString(data.UserName)),
+									Domain:        strLogonDomain,
+									LocalAdmin:    isAdmin,
+									LogonType:     data.LogonType,
+									DnsDomainName: LsatoString(data.DnsDomainName),
+									LogonTime:     data.LogonTime,
 								}
 								hn, _ := os.Hostname()
 								if strings.ToUpper(ud.Domain) == strings.ToUpper(hn) {
