@@ -4,6 +4,12 @@ import (
 	"fmt"
 )
 
+const (
+	SESS_INTERACTIVE_LOGON        = 2
+	SESS_REMOTE_INTERACTIVE_LOGON = 10
+	SESS_CACHED_INTERACTIVE_LOGON = 11
+)
+
 type SessionDetails struct {
 	Username      string `json:"username"`
 	Domain        string `json:"domain"`
@@ -16,4 +22,17 @@ type SessionDetails struct {
 
 func (s *SessionDetails) FullUser() string {
 	return fmt.Sprintf("%s\\%s", s.Domain, s.Username)
+}
+
+func (s *SessionDetails) GetLogonType() string {
+	switch s.LogonType {
+	case SESS_INTERACTIVE_LOGON:
+		return "INTERACTIVE_LOGON"
+	case SESS_REMOTE_INTERACTIVE_LOGON:
+		return "REMOTE_INTERACTIVE_LOGON"
+	case SESS_CACHED_INTERACTIVE_LOGON:
+		return "CACHED_INTERACTIVE_LOGON"
+	default:
+		return "UNKNOWN"
+	}
 }
