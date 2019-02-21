@@ -6,7 +6,7 @@ Tested and developed for Windows 10 x64.
 
 All functions that return useful data, do so in the form of JSON exportable structs.
 
-These structs are available in the shared library, "github.com/tera-insights/go-win64api/shared"
+These structs are available in the shared library, "github.com/iamacarpet/go-win64api/shared"
 
 ### Process List
 ```go
@@ -14,7 +14,7 @@ package main
 
 import (
     "fmt"
-    wapi "github.com/tera-insights/go-win64api"
+    wapi "github.com/iamacarpet/go-win64api"
 )
 
 func main(){
@@ -34,7 +34,7 @@ package main
 
 import (
     "fmt"
-    wapi "github.com/tera-insights/go-win64api"
+    wapi "github.com/iamacarpet/go-win64api"
 )
 
 func main(){
@@ -64,7 +64,7 @@ package main
 
 import (
     "fmt"
-    wapi "github.com/tera-insights/go-win64api"
+    wapi "github.com/iamacarpet/go-win64api"
 )
 
 func main(){
@@ -86,7 +86,7 @@ package main
 import (
         "fmt"
         "time"
-        wapi "github.com/tera-insights/go-win64api"
+        wapi "github.com/iamacarpet/go-win64api"
 )
 
 func main() {
@@ -112,7 +112,7 @@ package main
 import (
     "fmt"
 
-    wapi "github.com/tera-insights/go-win64api"
+    wapi "github.com/iamacarpet/go-win64api"
 )
 
 func main(){
@@ -143,7 +143,7 @@ package main
 import (
     "fmt"
     "time"
-    wapi "github.com/tera-insights/go-win64api"
+    wapi "github.com/iamacarpet/go-win64api"
 )
 
 func main(){

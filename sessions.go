@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	so "github.com/tera-insights/go-win64api/shared"
+	so "github.com/iamacarpet/go-win64api/shared"
 )
 
 var (
