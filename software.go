@@ -59,7 +59,7 @@ func getSoftwareList(baseKey string, arch string) ([]so.Software, error) {
 
 			id, _, err := sk.GetStringValue("InstallDate")
 			if err == nil {
-				swv.InstallDate, _ = time.Parse("20160102", id)
+				swv.InstallDate, _ = time.Parse("20060102", id)
 			}
 
 			es, _, err := sk.GetIntegerValue("EstimatedSize")
