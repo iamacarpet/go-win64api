@@ -630,14 +630,14 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
 				if err != nil {
 					return fmt.Errorf("Error while getting property IP Address from Network Adapter info. %s", err.Error())
 				}
-				if uintptr(resIP.Val) != 0 {
+				if uintptr(resIP.Val) != 0 && resIP.VT != ole.VT_NULL {
 					ips = resIP.ToArray().ToValueArray()
 				}
 				resSubnet, err := oleutil.GetProperty(item, "IPSubnet")
 				if err != nil {
 					return fmt.Errorf("Error while getting property IP Subnet from Network Adapter info. %s", err.Error())
 				}
-				if uintptr(resSubnet.Val) != 0 {
+				if uintptr(resSubnet.Val) != 0 && resSubnet.VT != ole.VT_NULL {
 					subnets = resSubnet.ToArray().ToValueArray()
 				}
 
