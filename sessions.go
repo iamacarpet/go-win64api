@@ -127,7 +127,7 @@ func uint64TimestampToTime(nsec uint64) time.Time {
 	// convert into nanoseconds
 	nsec *= 100
 
-	return time.Unix(0, nsec)
+	return time.Unix(0, int64(nsec))
 }
 
 func sessUserLUIDs() (map[LUID]string, error) {
