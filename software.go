@@ -82,6 +82,11 @@ func getSoftwareList(baseKey string, arch string) ([]so.Software, error) {
 				swv.InstallSource = isource
 			}
 
+			ilocaction, _, err := sk.GetStringValue("InstallLocation")
+			if err == nil {
+				swv.InstallLocation = ilocaction
+			}
+
 			mver, _, err := sk.GetIntegerValue("VersionMajor")
 			if err == nil {
 				swv.VersionMajor = mver
