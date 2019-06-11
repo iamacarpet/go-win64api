@@ -48,12 +48,13 @@ type Memory struct {
 }
 
 type Disk struct {
-	DriveName          string `json:"DriveName"`
-	TotalSize          uint64 `json:"TotalSize"`
-	Available          uint64 `json:"FreeSpace"`
-	FileSystem         string `json:"FileSystem"`
-	BitLockerEnabled   bool   `json:"BitLockerEnabled"`
-	BitLockerEncrypted bool   `json:"BitLockerEncrypted"`
+	DriveName             string               `json:"DriveName"`
+	TotalSize             uint64               `json:"TotalSize"`
+	Available             uint64               `json:"FreeSpace"`
+	FileSystem            string               `json:"FileSystem"`
+	BitLockerEnabled      bool                 `json:"BitLockerEnabled"`
+	BitLockerEncrypted    bool                 `json:"BitLockerEncrypted"`
+	BitLockerRecoveryInfo *BitLockerDeviceInfo `json:"BitLockerRecoveryInfo,omitempty"`
 }
 
 type Network struct {

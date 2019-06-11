@@ -560,6 +560,8 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
 
 				retDR.BitLockerEnabled, retDR.BitLockerEncrypted, _ = sysinfo_bitlocker_check(resName.ToString())
 
+				retDR.BitLockerRecoveryInfo, _ = GetBitLockerRecoveryInfoForDrive(resName.ToString())
+
 				retDISK = append(retDISK, retDR)
 
 				return nil
