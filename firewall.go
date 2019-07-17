@@ -16,6 +16,7 @@ const (
 	NET_FW_IP_PROTOCOL_UDP    = 17
 	NET_FW_IP_PROTOCOL_ICMPv4 = 1
 	NET_FW_IP_PROTOCOL_ICMPv6 = 58
+	NET_FW_IP_PROTOCOL_ANY    = 256
 
 	NET_FW_RULE_DIR_IN  = 1
 	NET_FW_RULE_DIR_OUT = 2
@@ -50,15 +51,23 @@ type FWProfiles struct {
 
 // FWRule represents Firewall Rule.
 type FWRule struct {
-	Name, Description, ApplicationName, ServiceName          string
-	LocalPorts, RemotePorts, LocalAddresses, RemoteAddresses string
+	Name, Description, ApplicationName, ServiceName string
+	LocalPorts, RemotePorts                         string
+	// LocalAddresses, RemoteAddresses are always returned with netmask, f.e.:
+	//   `10.10.1.1/255.255.255.0`
+	LocalAddresses, RemoteAddresses string
 	// ICMPTypesAndCodes is string. You can find define multiple codes separated by ":" (colon).
 	// Types are listed here:
 	// https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml
 	// So to allow ping set it to:
 	//   "0"
-	ICMPTypesAndCodes                     string
-	Grouping, InterfaceTypes              string
+	ICMPTypesAndCodes string
+	Grouping          string
+	// InterfaceTypes can be:
+	//   "LAN", "Wireless", "RemoteAccess", "All"
+	// You can add multiple deviding with comma:
+	//   "LAN, Wireless"
+	InterfaceTypes                        string
 	Protocol, Direction, Action, Profiles int32
 	Enabled, EdgeTraversal                bool
 }
@@ -102,8 +111,11 @@ func FirewallRuleAdd(name, description, group, ports string, protocol, profile i
 }
 
 // FirewallApplicationRuleAdd creates Inbound rule for given application.
+//
 // Rule Name is mandatory and must not contain the "|" character.
+//
 // Description and Group are optional. Description also can not contain the "|" character.
+//
 // AppPath is mandatory.
 // AppPath string should look like:
 //   `%ProgramFiles% (x86)\RemoteControl\winvnc.exe`
@@ -111,12 +123,11 @@ func FirewallRuleAdd(name, description, group, ports string, protocol, profile i
 //   NET_FW_IP_PROTOCOL_TCP
 //   // or
 //   NET_FW_IP_PROTOCOL_UDP
+//
 // Profile will decide in which profiles rule will apply. You can use:
 //   NET_FW_PROFILE2_CURRENT // adds rule to currently used FW Profile
 //   NET_FW_PROFILE2_ALL // adds rule to all profiles
 //   NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE // rule in Private and Domain profile
-//
-// TODO: would it be usefull to also define port as FirewallRuleCreate can?
 func FirewallApplicationRuleAdd(name, description, group, appPath string, profile int32) (bool, error) {
 	if appPath == "" {
 		return false, fmt.Errorf("empty FW Rule appPath, it is mandatory")
@@ -137,22 +148,22 @@ func FirewallRuleCreate(name, description, group, appPath, port string, protocol
 //
 // RemoteAddresses allows you to limit pinging to f.e.:
 //   "10.10.10.0/24"
-// TODO: test it
+// This will be internally converted to:
+//   "10.10.10.0/255.255.255.0"
 //
 // Profile will decide in which profiles rule will apply. You can use:
 //   NET_FW_PROFILE2_CURRENT // adds rule to currently used FW Profile
 //   NET_FW_PROFILE2_ALL // adds rule to all profiles
 //   NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE // rule in Private and Domain profile
 func FirewallPingEnable(name, description, group, remoteAddresses string, profile int32) (bool, error) {
-	return firewallRuleAdd(name, description, group, "", "", "", "", "", remoteAddresses, "0", NET_FW_IP_PROTOCOL_ICMPv4, 0, profile, true, false)
+	return firewallRuleAdd(name, description, group, "", "", "", "", "", remoteAddresses, "8:*", NET_FW_IP_PROTOCOL_ICMPv4, 0, profile, true, false)
 }
 
-// FirewallAdvancedRuleAdd allows to modify all available FW Rule parameters.
-// You probably do not want to use this as this allows to create any rule, even opening all ports
+// FirewallAdvancedRuleAdd allows to modify almost all available FW Rule parameters.
+// You probably do not want to use this, as function allows to create any rule, even opening all ports
 // in given profile. So use with caution.
 //
-// TODO: few usefull examples: app rule with specified ports, service rule, ICMPv6 rule, localAddr - remoteAdd rule,
-// ...
+// HINT: Use FirewallRulesGet to get examles how rules can be defined.
 func FirewallAdvancedRuleAdd(rule FWRule) (bool, error) {
 	return firewallRuleAdd(rule.Name, rule.Description, rule.Grouping, rule.ApplicationName, rule.ServiceName,
 		rule.LocalPorts, rule.RemotePorts, rule.LocalAddresses, rule.RemoteAddresses, rule.ICMPTypesAndCodes,
@@ -205,8 +216,8 @@ func FirewallRuleDelete(name string) (bool, error) {
 	return true, nil
 }
 
-// FirewallGetRules returns all rules defined in firewall.
-func FirewallGetRules() ([]FWRule, error) {
+// FirewallRulesGet returns all rules defined in firewall.
+func FirewallRulesGet() ([]FWRule, error) {
 	rules := make([]FWRule, 1000)
 
 	u, fwPolicy, err := apiInit()
@@ -337,6 +348,7 @@ func firewallRuleParams(itemRaw ole.VARIANT) (FWRule, error) {
 // Look at FILE_AND_PRINTER_SHARING const as example.
 // This codes can be found here:
 // https://windows10dll.nirsoft.net/firewallapi_dll.html
+//
 // You can enable group in selected FW profiles or in current,
 // use something like:
 //   NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE
@@ -467,7 +479,7 @@ func FirewallCurrentProfiles() (FWProfiles, error) {
 	cp := firewallParseProfiles(currentProfiles.Value().(int32))
 
 	if !(cp.Domain || cp.Private || cp.Public) {
-		// TODO: is no active profile possible? no network?
+		// is no active profile even possible? no network?
 		return cp, fmt.Errorf("no active FW profile detected")
 	}
 
