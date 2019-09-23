@@ -110,6 +110,7 @@ func ExampleFirewallRuleAddAdvanced_restrictedLocalPorts() {
 	if ok {
 		fmt.Println("Rule added!")
 	}
+	FirewallRuleDelete("Application rule enabling incoming connections only on port 1234") // check error!
 	// output: Rule added!
 }
 
@@ -139,5 +140,6 @@ func ExampleFirewallRuleAddAdvanced_serviceRule() {
 	if ok {
 		fmt.Println("Rule added!")
 	}
+	FirewallRuleDelete("All all connection to SQL Server Browser service") // check error!
 	// output: Rule added!
 }
