@@ -163,7 +163,7 @@ func FirewallPingEnable(name, description, group, remoteAddresses string, profil
 // You probably do not want to use this, as function allows to create any rule, even opening all ports
 // in given profile. So use with caution.
 //
-// HINT: Use FirewallRulesGet to get examles how rules can be defined.
+// HINT: Use FirewallRulesGet to get examples how rules can be defined.
 func FirewallAdvancedRuleAdd(rule FWRule) (bool, error) {
 	return firewallRuleAdd(rule.Name, rule.Description, rule.Grouping, rule.ApplicationName, rule.ServiceName,
 		rule.LocalPorts, rule.RemotePorts, rule.LocalAddresses, rule.RemoteAddresses, rule.ICMPTypesAndCodes,
@@ -191,11 +191,11 @@ func FirewallRuleDelete(name string) (bool, error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	u, fwPolicy, err := apiInit()
+	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
 		return false, err
 	}
-	defer apiRelease(u, fwPolicy)
+	defer firewallAPIRelease(u, fwPolicy)
 
 	unknownRules, err := oleutil.GetProperty(fwPolicy, "Rules")
 	if err != nil {
@@ -216,15 +216,64 @@ func FirewallRuleDelete(name string) (bool, error) {
 	return true, nil
 }
 
+// FirewallRuleGet returns firewall rule by given name.
+// Error is returned if there is problem calling API.
+//
+// If rule is not found, no error is returned, so check:
+//  if len(returnedRule) == 0 {
+//      if err != nil {
+//          fmt.Println(err)
+//      } else {
+//          fmt.Println("rule not found")
+//      }
+//  }
+func FirewallRuleGet(name string) (FWRule, error) {
+	var rule FWRule
+
+	u, fwPolicy, err := firewallAPIInit()
+	if err != nil {
+		return rule, err
+	}
+	defer firewallAPIRelease(u, fwPolicy)
+
+	ur, ep, enum, err := firewallRulesEnum(fwPolicy)
+	if err != nil {
+		return rule, err
+	}
+	defer firewallRulesEnumRealease(ur, ep)
+
+	for itemRaw, length, err := enum.Next(1); length > 0; itemRaw, length, err = enum.Next(1) {
+		if err != nil {
+			return rule, fmt.Errorf("failed to seek next Rule item: %s", err)
+		}
+		item := itemRaw.ToIDispatch()
+		n, err := firewallRuleName(item)
+		if err != nil {
+			return rule, err
+		}
+		if name == n {
+			rule, err = firewallRuleParams(itemRaw)
+			if err != nil {
+				return rule, err
+			}
+		} else {
+			// only not matching rules can be released
+			item.Release()
+		}
+	}
+
+	return rule, nil
+}
+
 // FirewallRulesGet returns all rules defined in firewall.
 func FirewallRulesGet() ([]FWRule, error) {
 	rules := make([]FWRule, 1000)
 
-	u, fwPolicy, err := apiInit()
+	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
 		return rules, err
 	}
-	defer apiRelease(u, fwPolicy)
+	defer firewallAPIRelease(u, fwPolicy)
 
 	ur, ep, enum, err := firewallRulesEnum(fwPolicy)
 	if err != nil {
@@ -245,6 +294,15 @@ func FirewallRulesGet() ([]FWRule, error) {
 	}
 
 	return rules, nil
+}
+
+func firewallRuleName(item *ole.IDispatch) (string, error) {
+
+	name, err := oleutil.GetProperty(item, "Name")
+	if err != nil {
+		return "", fmt.Errorf("failed to get Property (Name) of Rule, err: %v", err)
+	}
+	return name.ToString(), nil
 }
 
 // firewallRuleParams retrieves all Rule parameters from API and saves them in FWRule struct.
@@ -367,11 +425,11 @@ func firewallGroup(name string, profile int32, enable bool) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	u, fwPolicy, err := apiInit()
+	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
 		return err
 	}
-	defer apiRelease(u, fwPolicy)
+	defer firewallAPIRelease(u, fwPolicy)
 
 	if profile == NET_FW_PROFILE2_CURRENT {
 		currentProfiles, err := oleutil.GetProperty(fwPolicy, "CurrentProfileTypes")
@@ -392,11 +450,11 @@ func firewallGroup(name string, profile int32, enable bool) error {
 // You can use all NET_FW_PROFILE2* constants but NET_FW_PROFILE2_ALL.
 // It will return error if Firewall status can not be checked.
 func FirewallIsEnabled(profile int32) (bool, error) {
-	u, fwPolicy, err := apiInit()
+	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
 		return false, err
 	}
-	defer apiRelease(u, fwPolicy)
+	defer firewallAPIRelease(u, fwPolicy)
 
 	switch profile {
 	case NET_FW_PROFILE2_CURRENT:
@@ -417,11 +475,11 @@ func FirewallIsEnabled(profile int32) (bool, error) {
 // FirewallEnable enables firewall for given profile.
 // If firewall is enabled already for profile it will return false.
 func FirewallEnable(profile int32) (bool, error) {
-	u, fwPolicy, err := apiInit()
+	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
 		return false, err
 	}
-	defer apiRelease(u, fwPolicy)
+	defer firewallAPIRelease(u, fwPolicy)
 
 	enabled, err := oleutil.GetProperty(fwPolicy, "FirewallEnabled", profile)
 	if err != nil {
@@ -441,11 +499,11 @@ func FirewallEnable(profile int32) (bool, error) {
 // FirewallDisable disables firewall for given profile.
 // If firewall is disabled already for profile it will return false.
 func FirewallDisable(profile int32) (bool, error) {
-	u, fwPolicy, err := apiInit()
+	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
 		return false, err
 	}
-	defer apiRelease(u, fwPolicy)
+	defer firewallAPIRelease(u, fwPolicy)
 
 	enabled, err := oleutil.GetProperty(fwPolicy, "FirewallEnabled", profile)
 	if err != nil {
@@ -466,11 +524,11 @@ func FirewallDisable(profile int32) (bool, error) {
 // Every active interface can have it's own profile. F.e.: Public for Wifi,
 // Domain for VPN, and Private for LAN. All at the same time.
 func FirewallCurrentProfiles() (FWProfiles, error) {
-	u, fwPolicy, err := apiInit()
+	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
 		return FWProfiles{}, err
 	}
-	defer apiRelease(u, fwPolicy)
+	defer firewallAPIRelease(u, fwPolicy)
 	currentProfiles, err := oleutil.GetProperty(fwPolicy, "CurrentProfileTypes")
 	if err != nil {
 		return FWProfiles{}, fmt.Errorf("failed to get FW CurrentProfiles: %s", err)
@@ -512,11 +570,11 @@ func firewallRuleAdd(name, description, group, appPath, serviceName, ports, remo
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	u, fwPolicy, err := apiInit()
+	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
 		return false, err
 	}
-	defer apiRelease(u, fwPolicy)
+	defer firewallAPIRelease(u, fwPolicy)
 
 	if profile == NET_FW_PROFILE2_CURRENT {
 		currentProfiles, err := oleutil.GetProperty(fwPolicy, "CurrentProfileTypes")
@@ -704,10 +762,10 @@ func firewallRulesEnumRealease(unknownRules, enumProperty *ole.VARIANT) {
 	unknownRules.Clear()
 }
 
-// apiInit initialize common fw api.
+// firewallAPIInit initialize common fw api.
 // then:
-// dispatch apiRelease(u, fwp)
-func apiInit() (*ole.IUnknown, *ole.IDispatch, error) {
+// dispatch firewallAPIRelease(u, fwp)
+func firewallAPIInit() (*ole.IUnknown, *ole.IDispatch, error) {
 	ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
 
 	unknown, err := oleutil.CreateObject("HNetCfg.FwPolicy2")
@@ -725,8 +783,8 @@ func apiInit() (*ole.IUnknown, *ole.IDispatch, error) {
 
 }
 
-// apiRelease cleans memory.
-func apiRelease(u *ole.IUnknown, fwp *ole.IDispatch) {
+// firewallAPIRelease cleans memory.
+func firewallAPIRelease(u *ole.IUnknown, fwp *ole.IDispatch) {
 	fwp.Release()
 	u.Release()
 	ole.CoUninitialize()

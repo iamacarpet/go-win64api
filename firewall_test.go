@@ -108,6 +108,21 @@ func TestFirewallPingEnable(t *testing.T) {
 	fwRuleCheckAndDelete(rule, t)
 }
 
+// TestFirewallRuleGet will probably work only on Windows english localisation
+func TestFirewallRuleGet(t *testing.T) {
+	var empty FWRule
+	//name := "@FirewallAPI.dll,-25326"
+	name := "Core Networking - Teredo (UDP-In)"
+	r, err := FirewallRuleGet(name)
+	if r == empty {
+		if err != nil {
+			t.Errorf("problem with getting rule: %v", err)
+		} else {
+			t.Errorf("rule %q not found", name)
+		}
+	}
+}
+
 func fwRuleCheckAndDelete(rule FWRule, t *testing.T) {
 	rules, err := FirewallRulesGet()
 	if err != nil {
