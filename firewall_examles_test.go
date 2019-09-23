@@ -21,8 +21,8 @@ func ExampleFirewallRuleAdd() {
 	}
 }
 
-func ExampleFirewallApplicationRuleAdd() {
-	_, err := FirewallApplicationRuleAdd("SQL Browser App", "App rule for SQL Browser", "SQL Services",
+func ExampleFirewallRuleAddApplication() {
+	_, err := FirewallRuleAddApplication("SQL Browser App", "App rule for SQL Browser", "SQL Services",
 		`%ProgramFiles% (x86)\Microsoft SQL Server\90\Shared\sqlbrowser.exe`, NET_FW_PROFILE2_CURRENT)
 	if err != nil {
 		log.Fatalln(err)
@@ -54,7 +54,7 @@ func ExampleFirewallRulesGet_onlyEnabledInPrivateProfile() {
 	}
 }
 
-func ExampleFirewallAdvancedRuleAdd_iPv6Ping() {
+func ExampleFirewallRuleAddAdvanced_iPv6Ping() {
 	if !isAdmin() {
 		fmt.Println("elevated shell is required!")
 	}
@@ -68,7 +68,7 @@ func ExampleFirewallAdvancedRuleAdd_iPv6Ping() {
 	}
 
 	// Enable IPv6 ping
-	ok, err := FirewallAdvancedRuleAdd(r)
+	ok, err := FirewallRuleAddAdvanced(r)
 	if !ok {
 		if err != nil {
 			fmt.Println(err)
@@ -83,7 +83,7 @@ func ExampleFirewallAdvancedRuleAdd_iPv6Ping() {
 	FirewallRuleDelete("Allow IPv6 ping") // check error!
 }
 
-func ExampleFirewallAdvancedRuleAdd_restrictedLocalPorts() {
+func ExampleFirewallRuleAddAdvanced_restrictedLocalPorts() {
 	if !isAdmin() {
 		fmt.Println("elevated shell is required!")
 	}
@@ -99,7 +99,7 @@ func ExampleFirewallAdvancedRuleAdd_restrictedLocalPorts() {
 	}
 
 	// Enable app rule restricted to port 1234 TCP
-	ok, err := FirewallAdvancedRuleAdd(r)
+	ok, err := FirewallRuleAddAdvanced(r)
 	if !ok {
 		if err != nil {
 			fmt.Println(err)
@@ -113,7 +113,7 @@ func ExampleFirewallAdvancedRuleAdd_restrictedLocalPorts() {
 	// output: Rule added!
 }
 
-func ExampleFirewallAdvancedRuleAdd_serviceRule() {
+func ExampleFirewallRuleAddAdvanced_serviceRule() {
 	if !isAdmin() {
 		fmt.Println("elevated shell is required!")
 	}
@@ -128,7 +128,7 @@ func ExampleFirewallAdvancedRuleAdd_serviceRule() {
 	}
 
 	// Enable service rule
-	ok, err := FirewallAdvancedRuleAdd(r)
+	ok, err := FirewallRuleAddAdvanced(r)
 	if !ok {
 		if err != nil {
 			fmt.Println(err)

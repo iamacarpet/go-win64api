@@ -110,7 +110,7 @@ func FirewallRuleAdd(name, description, group, ports string, protocol, profile i
 	return firewallRuleAdd(name, description, group, "", "", ports, "", "", "", "", protocol, 0, profile, true, false)
 }
 
-// FirewallApplicationRuleAdd creates Inbound rule for given application.
+// FirewallRuleAddApplication creates Inbound rule for given application.
 //
 // Rule Name is mandatory and must not contain the "|" character.
 //
@@ -128,14 +128,14 @@ func FirewallRuleAdd(name, description, group, ports string, protocol, profile i
 //   NET_FW_PROFILE2_CURRENT // adds rule to currently used FW Profile
 //   NET_FW_PROFILE2_ALL // adds rule to all profiles
 //   NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE // rule in Private and Domain profile
-func FirewallApplicationRuleAdd(name, description, group, appPath string, profile int32) (bool, error) {
+func FirewallRuleAddApplication(name, description, group, appPath string, profile int32) (bool, error) {
 	if appPath == "" {
 		return false, fmt.Errorf("empty FW Rule appPath, it is mandatory")
 	}
 	return firewallRuleAdd(name, description, group, appPath, "", "", "", "", "", "", 0, 0, profile, true, false)
 }
 
-// FirewallRuleCreate is deprecated, use FirewallApplicationRuleAdd instead.
+// FirewallRuleCreate is deprecated, use FirewallRuleAddApplication instead.
 func FirewallRuleCreate(name, description, group, appPath, port string, protocol int32) (bool, error) {
 	return firewallRuleAdd(name, description, group, appPath, "", port, "", "", "", "", protocol, 0, NET_FW_PROFILE2_CURRENT, true, false)
 }
@@ -159,12 +159,12 @@ func FirewallPingEnable(name, description, group, remoteAddresses string, profil
 	return firewallRuleAdd(name, description, group, "", "", "", "", "", remoteAddresses, "8:*", NET_FW_IP_PROTOCOL_ICMPv4, 0, profile, true, false)
 }
 
-// FirewallAdvancedRuleAdd allows to modify almost all available FW Rule parameters.
+// FirewallRuleAddAdvanced allows to modify almost all available FW Rule parameters.
 // You probably do not want to use this, as function allows to create any rule, even opening all ports
 // in given profile. So use with caution.
 //
 // HINT: Use FirewallRulesGet to get examples how rules can be defined.
-func FirewallAdvancedRuleAdd(rule FWRule) (bool, error) {
+func FirewallRuleAddAdvanced(rule FWRule) (bool, error) {
 	return firewallRuleAdd(rule.Name, rule.Description, rule.Grouping, rule.ApplicationName, rule.ServiceName,
 		rule.LocalPorts, rule.RemotePorts, rule.LocalAddresses, rule.RemoteAddresses, rule.ICMPTypesAndCodes,
 		rule.Protocol, rule.Direction, rule.Profiles, rule.Enabled, rule.EdgeTraversal)

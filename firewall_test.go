@@ -60,7 +60,7 @@ func TestCreatingRule(t *testing.T) {
 	fwRuleCheckAndDelete(rule, t)
 }
 
-func TestFirewallApplicationRule(t *testing.T) {
+func TestFirewallRuleAddApplication(t *testing.T) {
 	if !isAdmin() {
 		t.Fatal("run test in elevated shell (Run as administrator)!")
 	}
@@ -73,7 +73,7 @@ func TestFirewallApplicationRule(t *testing.T) {
 	rule.LocalAddresses = "*"
 	rule.InterfaceTypes = "All"
 	rule.Protocol = NET_FW_IP_PROTOCOL_ANY
-	ok, err := FirewallApplicationRuleAdd(rule.Name, rule.Description, rule.Grouping, rule.ApplicationName, rule.Profiles)
+	ok, err := FirewallRuleAddApplication(rule.Name, rule.Description, rule.Grouping, rule.ApplicationName, rule.Profiles)
 	if !ok {
 		if err != nil {
 			t.Errorf("problem with adding FW application rule: %v", err)
