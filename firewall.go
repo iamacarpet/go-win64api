@@ -654,7 +654,7 @@ func firewallRuleAdd(name, description, group, appPath, serviceName, ports, remo
 		}
 	}
 	if direction != 0 {
-		if _, err := oleutil.PutProperty(fwRule, "Direcition", direction); err != nil {
+		if _, err := oleutil.PutProperty(fwRule, "Direction", direction); err != nil {
 			return false, fmt.Errorf("Error setting property (Direction) of Rule: %s", err)
 		}
 	}
