@@ -3,7 +3,6 @@
 package winapi
 
 import (
-	"fmt"
 	"syscall"
 	"unsafe"
 )
@@ -82,21 +81,21 @@ func CreateUserProfile(username string) (string, error) {
 	// Get raw Sid
 	rawSid, err := GetRawSidForAccountName(username)
 	if err != nil {
-		return "", fmt.Errorf("Unable to get raw ssid")
+		return "", err
 	}
 	// Convert Sid to string
 	sid, err := ConvertRawSidToStringSid(rawSid)
 	if err != nil {
-		return "", fmt.Errorf("Unable to convert raw ssid to string")
+		return "", err
 	}
 	// Convert strings
 	usernamePtr, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
-		return "", fmt.Errorf("failed to convert user name to UTF16: %v", err)
+		return "", err
 	}
 	sidPtr, err := syscall.UTF16PtrFromString(sid)
 	if err != nil {
-		return "", fmt.Errorf("failed to convert user name to UTF16: %v", err)
+		return "", err
 	}
 	// Set buffer size
 	var bufferSize uint32 = 128
