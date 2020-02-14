@@ -98,7 +98,7 @@ func CreateUserProfile(username string) (string, error) {
 		return "", err
 	}
 	// Set buffer size
-	var bufferSize uint32 = 128
+	var bufferSize uint32 = 260 // MAX_SIZE
 	// bufferSize now contains the size of the buffer needed to contain the path.
 	buffer := make([]uint16, bufferSize)
 	// Create Profile
