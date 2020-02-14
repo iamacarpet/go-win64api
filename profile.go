@@ -11,6 +11,7 @@ var (
 	modUserenv                          = syscall.NewLazyDLL("Userenv.dll")
 	procGetDefaultUserProfileDirectoryW = modUserenv.NewProc("GetDefaultUserProfileDirectoryW")
 	procGetProfilesDirectoryW           = modUserenv.NewProc("GetProfilesDirectoryW")
+	userCreateProfile                   = modUserenv.NewProc("CreateProfile")
 )
 
 // GetDefaultUserProfileDirectory returns the path to the directory in which the
@@ -70,6 +71,44 @@ func GetProfilesDirectory() (string, error) {
 		uintptr(unsafe.Pointer(&bufferSize)), // lpcchSize = &bufferSize
 	)
 	if r1 == 0 {
+		return "", err
+	}
+	return syscall.UTF16ToString(buffer), nil
+}
+
+// CreateUserProfile creates the user profile.
+func CreateUserProfile(username string) (string, error) {
+	// Get raw Sid
+	rawSid, err := GetRawSidForAccountName(username)
+	if err != nil {
+		return "", err
+	}
+	// Convert Sid to string
+	sid, err := ConvertRawSidToStringSid(rawSid)
+	if err != nil {
+		return "", err
+	}
+	// Convert strings
+	usernamePtr, err := syscall.UTF16PtrFromString(username)
+	if err != nil {
+		return "", err
+	}
+	sidPtr, err := syscall.UTF16PtrFromString(sid)
+	if err != nil {
+		return "", err
+	}
+	// Set buffer size
+	var bufferSize uint32 = 128
+	// bufferSize now contains the size of the buffer needed to contain the path.
+	buffer := make([]uint16, bufferSize)
+	// Create Profile
+	r1, _, err := userCreateProfile.Call(
+		uintptr(unsafe.Pointer(sidPtr)),
+		uintptr(unsafe.Pointer(usernamePtr)),
+		uintptr(unsafe.Pointer(&buffer[0])),
+		uintptr(bufferSize),
+	)
+	if r1 != 0 {
 		return "", err
 	}
 	return syscall.UTF16ToString(buffer), nil
