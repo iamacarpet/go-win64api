@@ -77,7 +77,7 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
 			var data *SECURITY_LOGON_SESSION_DATA = (*SECURITY_LOGON_SESSION_DATA)(unsafe.Pointer(sessionData))
 
 			if data.Sid != uintptr(0) {
-				validTypes := []uint32{so.SESS_INTERACTIVE_LOGON, so.SESS_CACHED_INTERACTIVE_LOGON, so.SESS_REMOTE_INTERACTIVE_LOGON}
+				validTypes := []uint32{so.SESS_CACHED_INTERACTIVE_LOGON, so.SESS_REMOTE_INTERACTIVE_LOGON}
 				if in_array(data.LogonType, validTypes) {
 					strLogonDomain := strings.ToUpper(LsatoString(data.LogonDomain))
 					if strLogonDomain != "WINDOW MANAGER" && strLogonDomain != "FONT DRIVER HOST" {
