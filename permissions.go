@@ -1,12 +1,15 @@
 package winapi
 
 import (
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
 var (
+	procGetFileSecurity           = modAdvapi32.NewProc("GetFileSecurityW")
+	procSetFileSecurity           = modAdvapi32.NewProc("SetFileSecurityW")
 	procAddAce                    = modAdvapi32.NewProc("AddAce")
 	procSetEntriesInACL           = modAdvapi32.NewProc("SetEntriesInAclW")
 	procGetSecurityDescriptorDACL = modAdvapi32.NewProc("GetSecurityDescriptorDacl")
@@ -16,6 +19,41 @@ var (
 	procMakeAbsoluteSD            = modAdvapi32.NewProc("MakeAbsoluteSD")
 	procMakeSelfRelativeSD        = modAdvapi32.NewProc("MakeSelfRelativeSD")
 )
+
+// GetFileSecurityDescriptor returns a buffer with the file sec Descriptor
+func GetFileSecurityDescriptor(path string, secInfo windows.SECURITY_INFORMATION) ([]uint16, error) {
+	//Convert path
+	pathPtr, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return nil, err
+	}
+	//Initialize size and call for the first time
+	var bufferSize uint32
+	r1, _, err := procGetFileSecurity.Call(
+		uintptr(unsafe.Pointer(pathPtr)),
+		uintptr(secInfo),
+		uintptr(0),
+		uintptr(0),
+		uintptr(unsafe.Pointer(&bufferSize)),
+	)
+
+	if bufferSize == 0 {
+		return nil, err
+	}
+
+	secDescriptor := make([]uint16, bufferSize)
+	r1, _, err = procGetFileSecurity.Call(
+		uintptr(unsafe.Pointer(&path)),
+		uintptr(secInfo),
+		uintptr(unsafe.Pointer(&secDescriptor)),
+		uintptr(bufferSize),
+		uintptr(unsafe.Pointer(&bufferSize)),
+	)
+	if r1 == 0 {
+		return nil, err
+	}
+	return secDescriptor, nil
+}
 
 // IsValidSecDescriptor returns true is the secDescriptor is valid
 func IsValidSecDescriptor(secDescriptor []uint16) (bool, error) {
