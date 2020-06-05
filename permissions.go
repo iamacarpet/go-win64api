@@ -45,7 +45,7 @@ func GetFileSecurityDescriptor(path string, secInfo windows.SECURITY_INFORMATION
 	r1, _, err = procGetFileSecurity.Call(
 		uintptr(unsafe.Pointer(&path)),
 		uintptr(secInfo),
-		uintptr(unsafe.Pointer(&secDescriptor)),
+		uintptr(unsafe.Pointer(&[0]secDescriptor)),
 		uintptr(bufferSize),
 		uintptr(unsafe.Pointer(&bufferSize)),
 	)
