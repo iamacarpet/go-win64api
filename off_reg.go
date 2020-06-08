@@ -165,7 +165,7 @@ func ORAddFullPermissions(srcHivePath string, dstHivePath string, username strin
 		return err
 	}
 	// Add ACE
-	newACL, err := ACLAddFullControl(username, dacl)
+	newACL, err := ACLAddControl([]string{username}, dacl, windows.KEY_ALL_ACCESS)
 	if err != nil {
 		return err
 	}

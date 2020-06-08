@@ -20,6 +20,63 @@ var (
 	procMakeSelfRelativeSD        = modAdvapi32.NewProc("MakeSelfRelativeSD")
 )
 
+// SetFilePermissions gives the requested permissions to the given users on the given file.
+// If replace is false, the new file permissions will include old permissions; it will only
+// contain the ones set on this call otherwise
+func SetFilePermissions(usernames []string, path string, permissions windows.ACCESS_MASK, replace bool) error {
+	selfRelativeSecDescriptor, err := GetFileSecurityDescriptor(path, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return err
+	}
+	AbsoluteSecDescriptor, err := MakeAbsoluteSD(selfRelativeSecDescriptor)
+	if err != nil {
+		return err
+	}
+	acl, present, defaulted, err := GetSecurityDescriptorDACL(selfRelativeSecDescriptor)
+	if err != nil {
+		return err
+	}
+	var newACL *windows.ACL
+	if replace {
+		newACL, err = ACLSetControl(usernames, permissions)
+	} else {
+		newACL, err = ACLAddControl(usernames, acl, permissions)
+	}
+	if err != nil {
+		return err
+	}
+	err = SetSecurityDescriptorDACL(AbsoluteSecDescriptor, newACL, present, defaulted)
+	if err != nil {
+		return err
+	}
+	selfRelativeSecDescriptor, err = MakeSelfRelativeSD(AbsoluteSecDescriptor)
+	if err != nil {
+		return err
+	}
+	err = SetFileSecurityDescriptor(path, selfRelativeSecDescriptor, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetFilePermissions return the list of Explicit entries on the file's DACL
+func GetFilePermissions(path string) ([]windows.EXPLICIT_ACCESS, error) {
+	selfRelativeSecDescriptor, err := GetFileSecurityDescriptor(path, windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return nil, err
+	}
+	acl, _, _, err := GetSecurityDescriptorDACL(selfRelativeSecDescriptor)
+	if err != nil {
+		return nil, err
+	}
+	explicitEntries, err := GetExplicitEntriesFromACL(acl)
+	if err != nil {
+		return nil, err
+	}
+	return *explicitEntries, nil
+}
+
 // GetFileSecurityDescriptor returns a buffer with the file sec Descriptor
 func GetFileSecurityDescriptor(path string, secInfo windows.SECURITY_INFORMATION) ([]uint16, error) {
 	//Convert path
@@ -28,12 +85,12 @@ func GetFileSecurityDescriptor(path string, secInfo windows.SECURITY_INFORMATION
 		return nil, err
 	}
 	//Initialize size and call for the first time
-	var bufferSize uint32
+	var bufferSize uint32 = 0
 	r1, _, err := procGetFileSecurity.Call(
 		uintptr(unsafe.Pointer(pathPtr)),
 		uintptr(secInfo),
 		uintptr(0),
-		uintptr(0),
+		uintptr(bufferSize),
 		uintptr(unsafe.Pointer(&bufferSize)),
 	)
 
@@ -43,9 +100,9 @@ func GetFileSecurityDescriptor(path string, secInfo windows.SECURITY_INFORMATION
 
 	secDescriptor := make([]uint16, bufferSize)
 	r1, _, err = procGetFileSecurity.Call(
-		uintptr(unsafe.Pointer(&path)),
+		uintptr(unsafe.Pointer(pathPtr)),
 		uintptr(secInfo),
-		uintptr(unsafe.Pointer(&secDescriptor)),
+		uintptr(unsafe.Pointer(&secDescriptor[0])),
 		uintptr(bufferSize),
 		uintptr(unsafe.Pointer(&bufferSize)),
 	)
@@ -53,6 +110,26 @@ func GetFileSecurityDescriptor(path string, secInfo windows.SECURITY_INFORMATION
 		return nil, err
 	}
 	return secDescriptor, nil
+}
+
+// SetFileSecurityDescriptor sets a file security descriptor to the indicated file
+func SetFileSecurityDescriptor(path string, secDescriptor []uint16, secInfo windows.SECURITY_INFORMATION) error {
+	//Convert path
+	pathPtr, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+
+	r1, _, err := procSetFileSecurity.Call(
+		uintptr(unsafe.Pointer(pathPtr)),
+		uintptr(secInfo),
+		uintptr(unsafe.Pointer(&secDescriptor[0])),
+	)
+
+	if r1 == 0 {
+		return err
+	}
+	return nil
 }
 
 // IsValidSecDescriptor returns true is the secDescriptor is valid
@@ -124,37 +201,35 @@ func SetSecurityDescriptorDACL(pSecDescriptor []uint16, acl *windows.ACL, presen
 	return nil
 }
 
-// ACLAddFullControl adds full controll permissions for the given user in an ACL
-func ACLAddFullControl(username string, acl *windows.ACL) (*windows.ACL, error) {
-	// Get user SID
-	rawSid, err := GetRawSidForAccountName(username)
+// ACLSetControl makes an ACL with the indicated permission in accessMask for the given users
+func ACLSetControl(usernames []string, accessMask windows.ACCESS_MASK) (*windows.ACL, error) {
+	newACEs, err := makeACEsWithMask(usernames, accessMask)
 	if err != nil {
 		return nil, err
 	}
-	// Convert Sid to string
-	strSid, err := ConvertRawSidToStringSid(rawSid)
-	if err != nil {
+	// Explicit entries size
+	var newACEsSize uint32 = uint32(len(newACEs))
+	// Create new ACL
+	var newACL *windows.ACL
+	// Get new ACL
+	r1, _, err := procSetEntriesInACL.Call(
+		uintptr(newACEsSize),
+		uintptr(unsafe.Pointer(&newACEs[0])),
+		uintptr(0),
+		uintptr(unsafe.Pointer(&newACL)),
+	)
+	if r1 != 0 {
+		err = windows.GetLastError()
 		return nil, err
 	}
-	// Get SID from string sid
-	sid, err := windows.StringToSid(strSid)
+	return newACL, nil
+}
+
+// ACLAddControl adds the indicated permission in accessMask for the given users in an ACL
+func ACLAddControl(usernames []string, acl *windows.ACL, accessMask windows.ACCESS_MASK) (*windows.ACL, error) {
+	newACEs, err := makeACEsWithMask(usernames, accessMask)
 	if err != nil {
 		return nil, err
-	}
-	// Create nnew explicit access structure
-	newACEs := []windows.EXPLICIT_ACCESS{
-		{
-			AccessPermissions: windows.KEY_ALL_ACCESS,
-			AccessMode:        windows.SET_ACCESS,
-			Inheritance:       windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT,
-			Trustee: windows.TRUSTEE{
-				MultipleTrustee:          nil,
-				MultipleTrusteeOperation: windows.NO_MULTIPLE_TRUSTEE,
-				TrusteeForm:              windows.TRUSTEE_IS_SID,
-				TrusteeType:              windows.TRUSTEE_IS_USER,
-				TrusteeValue:             windows.TrusteeValueFromSID(sid),
-			},
-		},
 	}
 	// Explicit entries size
 	var newACEsSize uint32 = uint32(len(newACEs))
@@ -172,6 +247,40 @@ func ACLAddFullControl(username string, acl *windows.ACL) (*windows.ACL, error) 
 		return nil, err
 	}
 	return newACL, nil
+}
+
+func makeACEsWithMask(usernames []string, accessMask windows.ACCESS_MASK) ([]windows.EXPLICIT_ACCESS, error) {
+	newACEs := []windows.EXPLICIT_ACCESS{}
+	for _, username := range usernames {
+		// Get user SID
+		rawSid, err := GetRawSidForAccountName(username)
+		if err != nil {
+			return nil, err
+		}
+		// Convert Sid to string
+		strSid, err := ConvertRawSidToStringSid(rawSid)
+		if err != nil {
+			return nil, err
+		}
+		// Get SID from string sid
+		sid, err := windows.StringToSid(strSid)
+		if err != nil {
+			return nil, err
+		}
+		newACEs = append(newACEs, windows.EXPLICIT_ACCESS{
+			AccessPermissions: accessMask,
+			AccessMode:        windows.SET_ACCESS,
+			Inheritance:       windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT,
+			Trustee: windows.TRUSTEE{
+				MultipleTrustee:          nil,
+				MultipleTrusteeOperation: windows.NO_MULTIPLE_TRUSTEE,
+				TrusteeForm:              windows.TRUSTEE_IS_SID,
+				TrusteeType:              windows.TRUSTEE_IS_USER,
+				TrusteeValue:             windows.TrusteeValueFromSID(sid),
+			},
+		})
+	}
+	return newACEs, nil
 }
 
 // MakeAbsoluteSD makes an absolute security descriptor out of a self-relative
@@ -205,18 +314,41 @@ func MakeAbsoluteSD(selfRelative []uint16) ([]uint16, error) {
 	Asacl := make([]uint16, AsaclSize)
 	Aowner := make([]uint16, AownerSize)
 	AprimaryGroup := make([]uint16, AprimaryGroupSize)
+
+	// Make Pointers
+	var AsecDesPtr *uint16
+	var AdaclPtr *uint16
+	var AsaclPtr *uint16
+	var AownerPtr *uint16
+	var AprimaryGroupPtr *uint16
+
+	if AsecDesSize != 0 {
+		AsecDesPtr = &AsecDes[0]
+	}
+	if AdaclSize != 0 {
+		AdaclPtr = &Adacl[0]
+	}
+	if AsaclSize != 0 {
+		AsaclPtr = &Asacl[0]
+	}
+	if AownerSize != 0 {
+		AownerPtr = &Aowner[0]
+	}
+	if AprimaryGroupSize != 0 {
+		AprimaryGroupPtr = &AprimaryGroup[0]
+	}
 	// Final call
 	r1, _, err = procMakeAbsoluteSD.Call(
 		uintptr(unsafe.Pointer(&selfRelative[0])),
-		uintptr(unsafe.Pointer(&AsecDes[0])),
+		uintptr(unsafe.Pointer(AsecDesPtr)),
 		uintptr(unsafe.Pointer(&AsecDesSize)),
-		uintptr(unsafe.Pointer(&Adacl[0])),
+		uintptr(unsafe.Pointer(AdaclPtr)),
 		uintptr(unsafe.Pointer(&AdaclSize)),
-		uintptr(unsafe.Pointer(&Asacl[0])),
+		uintptr(unsafe.Pointer(AsaclPtr)),
 		uintptr(unsafe.Pointer(&AsaclSize)),
-		uintptr(unsafe.Pointer(&Aowner[0])),
+		uintptr(unsafe.Pointer(AownerPtr)),
 		uintptr(unsafe.Pointer(&AownerSize)),
-		uintptr(unsafe.Pointer(&AprimaryGroup[0])),
+		uintptr(unsafe.Pointer(AprimaryGroupPtr)),
 		uintptr(unsafe.Pointer(&AprimaryGroupSize)),
 	)
 	if r1 == 0 {
