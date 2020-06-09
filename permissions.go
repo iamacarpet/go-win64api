@@ -23,7 +23,7 @@ var (
 // SetFilePermissions gives the requested permissions to the given users on the given file.
 // If replace is false, the new file permissions will include old permissions; it will only
 // contain the ones set on this call otherwise
-func SetFilePermissions(usernames []string, path string, permissions windows.ACCESS_MASK, replace bool) error {
+func SetFilePermissions(usernames []string, path string, permissions windows.ACCESS_MASK, accessMode windows.ACCESS_MODE, replace bool) error {
 	selfRelativeSecDescriptor, err := GetFileSecurityDescriptor(path, windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		return err
@@ -38,9 +38,9 @@ func SetFilePermissions(usernames []string, path string, permissions windows.ACC
 	}
 	var newACL *windows.ACL
 	if replace {
-		newACL, err = ACLSetControl(usernames, permissions)
+		newACL, err = ACLSetControl(usernames, permissions, accessMode)
 	} else {
-		newACL, err = ACLAddControl(usernames, acl, permissions)
+		newACL, err = ACLAddControl(usernames, acl, permissions, accessMode)
 	}
 	if err != nil {
 		return err
@@ -202,8 +202,8 @@ func SetSecurityDescriptorDACL(pSecDescriptor []uint16, acl *windows.ACL, presen
 }
 
 // ACLSetControl makes an ACL with the indicated permission in accessMask for the given users
-func ACLSetControl(usernames []string, accessMask windows.ACCESS_MASK) (*windows.ACL, error) {
-	newACEs, err := makeACEsWithMask(usernames, accessMask)
+func ACLSetControl(usernames []string, accessMask windows.ACCESS_MASK, accessMode windows.ACCESS_MODE) (*windows.ACL, error) {
+	newACEs, err := makeACEsWithMask(usernames, accessMask, accessMode)
 	if err != nil {
 		return nil, err
 	}
@@ -226,8 +226,8 @@ func ACLSetControl(usernames []string, accessMask windows.ACCESS_MASK) (*windows
 }
 
 // ACLAddControl adds the indicated permission in accessMask for the given users in an ACL
-func ACLAddControl(usernames []string, acl *windows.ACL, accessMask windows.ACCESS_MASK) (*windows.ACL, error) {
-	newACEs, err := makeACEsWithMask(usernames, accessMask)
+func ACLAddControl(usernames []string, acl *windows.ACL, accessMask windows.ACCESS_MASK, accessMode windows.ACCESS_MODE) (*windows.ACL, error) {
+	newACEs, err := makeACEsWithMask(usernames, accessMask, accessMode)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +249,7 @@ func ACLAddControl(usernames []string, acl *windows.ACL, accessMask windows.ACCE
 	return newACL, nil
 }
 
-func makeACEsWithMask(usernames []string, accessMask windows.ACCESS_MASK) ([]windows.EXPLICIT_ACCESS, error) {
+func makeACEsWithMask(usernames []string, accessMask windows.ACCESS_MASK, accessMode windows.ACCESS_MODE) ([]windows.EXPLICIT_ACCESS, error) {
 	newACEs := []windows.EXPLICIT_ACCESS{}
 	for _, username := range usernames {
 		// Get user SID
@@ -269,7 +269,7 @@ func makeACEsWithMask(usernames []string, accessMask windows.ACCESS_MASK) ([]win
 		}
 		newACEs = append(newACEs, windows.EXPLICIT_ACCESS{
 			AccessPermissions: accessMask,
-			AccessMode:        windows.SET_ACCESS,
+			AccessMode:        accessMode,
 			Inheritance:       windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT,
 			Trustee: windows.TRUSTEE{
 				MultipleTrustee:          nil,
