@@ -10,6 +10,7 @@ import (
 var (
 	procGetFileSecurity           = modAdvapi32.NewProc("GetFileSecurityW")
 	procSetFileSecurity           = modAdvapi32.NewProc("SetFileSecurityW")
+	procSetNamedSecurityInfo      = modAdvapi32.NewProc("SetNamedSecurityInfoW")
 	procAddAce                    = modAdvapi32.NewProc("AddAce")
 	procSetEntriesInACL           = modAdvapi32.NewProc("SetEntriesInAclW")
 	procGetSecurityDescriptorDACL = modAdvapi32.NewProc("GetSecurityDescriptorDacl")
@@ -28,11 +29,7 @@ func SetFilePermissions(usernames []string, path string, permissions windows.ACC
 	if err != nil {
 		return err
 	}
-	AbsoluteSecDescriptor, err := MakeAbsoluteSD(selfRelativeSecDescriptor)
-	if err != nil {
-		return err
-	}
-	acl, present, defaulted, err := GetSecurityDescriptorDACL(selfRelativeSecDescriptor)
+	acl, _, _, err := GetSecurityDescriptorDACL(selfRelativeSecDescriptor)
 	if err != nil {
 		return err
 	}
@@ -45,18 +42,11 @@ func SetFilePermissions(usernames []string, path string, permissions windows.ACC
 	if err != nil {
 		return err
 	}
-	err = SetSecurityDescriptorDACL(AbsoluteSecDescriptor, newACL, present, defaulted)
+	err = SetFileACL(path, newACL)
 	if err != nil {
 		return err
 	}
-	selfRelativeSecDescriptor, err = MakeSelfRelativeSD(AbsoluteSecDescriptor)
-	if err != nil {
-		return err
-	}
-	err = SetFileSecurityDescriptor(path, selfRelativeSecDescriptor, windows.DACL_SECURITY_INFORMATION)
-	if err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -127,6 +117,28 @@ func SetFileSecurityDescriptor(path string, secDescriptor []uint16, secInfo wind
 	)
 
 	if r1 == 0 {
+		return err
+	}
+	return nil
+}
+
+// SetFileACL sets the given ACL to the object pointed to by path
+func SetFileACL(path string, acl *windows.ACL) error {
+	pathPtr, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+
+	r1, _, err := procSetNamedSecurityInfo.Call(
+		uintptr(unsafe.Pointer(pathPtr)),
+		uintptr(windows.SE_FILE_OBJECT),
+		uintptr(windows.DACL_SECURITY_INFORMATION),
+		uintptr(0),
+		uintptr(0),
+		uintptr(unsafe.Pointer(acl)),
+		uintptr(0),
+	)
+	if r1 != 0 {
 		return err
 	}
 	return nil
