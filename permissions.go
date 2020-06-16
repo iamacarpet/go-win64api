@@ -24,7 +24,8 @@ var (
 // SetFilePermissions gives the requested permissions to the given users on the given file.
 // If replace is false, the new file permissions will include old permissions; it will only
 // contain the ones set on this call otherwise
-func SetFilePermissions(usernames []string, path string, permissions windows.ACCESS_MASK, accessMode windows.ACCESS_MODE, replace bool) error {
+func SetFilePermissions(usernames []string, path string,
+	permissions windows.ACCESS_MASK, accessMode windows.ACCESS_MODE, inherit bool, replace bool) error {
 	selfRelativeSecDescriptor, err := GetFileSecurityDescriptor(path, windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		return err
@@ -42,7 +43,7 @@ func SetFilePermissions(usernames []string, path string, permissions windows.ACC
 	if err != nil {
 		return err
 	}
-	err = SetFileACL(path, newACL)
+	err = SetFileACL(path, newACL, inherit)
 	if err != nil {
 		return err
 	}
@@ -123,16 +124,23 @@ func SetFileSecurityDescriptor(path string, secDescriptor []uint16, secInfo wind
 }
 
 // SetFileACL sets the given ACL to the object pointed to by path
-func SetFileACL(path string, acl *windows.ACL) error {
+func SetFileACL(path string, acl *windows.ACL, inherit bool) error {
 	pathPtr, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
 		return err
 	}
 
+	securityInfo := windows.DACL_SECURITY_INFORMATION
+	if inherit {
+		securityInfo += windows.UNPROTECTED_DACL_SECURITY_INFORMATION
+	} else {
+		securityInfo += windows.PROTECTED_DACL_SECURITY_INFORMATION
+	}
+
 	r1, _, err := procSetNamedSecurityInfo.Call(
 		uintptr(unsafe.Pointer(pathPtr)),
 		uintptr(windows.SE_FILE_OBJECT),
-		uintptr(windows.DACL_SECURITY_INFORMATION),
+		uintptr(securityInfo),
 		uintptr(0),
 		uintptr(0),
 		uintptr(unsafe.Pointer(acl)),
