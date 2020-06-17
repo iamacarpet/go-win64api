@@ -21,12 +21,12 @@ var (
 	procMakeSelfRelativeSD        = modAdvapi32.NewProc("MakeSelfRelativeSD")
 )
 
-// InheritAction tells the permissions changer how to set the object's inheritance
-type InheritAction int
+// InheritMode tells the permissions changer how to set the object's inheritance
+type InheritMode int
 
 const (
 	// NoChange does not change the inheritance status
-	NoChange InheritAction = iota
+	NoChange InheritMode = iota
 	// DoNotInherit disables inheritance
 	DoNotInherit
 	// Inherit enables inheritance
@@ -37,7 +37,7 @@ const (
 // If replace is false, the new file permissions will include old permissions; it will only
 // contain the ones set on this call otherwise
 func SetFilePermissions(usernames []string, path string,
-	permissions windows.ACCESS_MASK, accessMode windows.ACCESS_MODE, inherit InheritAction, replace bool) error {
+	permissions windows.ACCESS_MASK, accessMode windows.ACCESS_MODE, inherit InheritMode, replace bool) error {
 	selfRelativeSecDescriptor, err := GetFileSecurityDescriptor(path, windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ func SetFileSecurityDescriptor(path string, secDescriptor []uint16, secInfo wind
 }
 
 // SetFileACL sets the given ACL to the object pointed to by path
-func SetFileACL(path string, acl *windows.ACL, inherit InheritAction) error {
+func SetFileACL(path string, acl *windows.ACL, inherit InheritMode) error {
 	pathPtr, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
 		return err
