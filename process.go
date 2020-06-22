@@ -23,6 +23,7 @@ var (
 	procGetCurrentProcess         = modKernel32.NewProc("GetCurrentProcess")
 	procTerminateProcess          = modKernel32.NewProc("TerminateProcess")
 	procGetLastError              = modKernel32.NewProc("GetLastError")
+	procSetThreadExecutionState   = modKernel32.NewProc("SetThreadExecutionState")
 
 	modAdvapi32                  = syscall.NewLazyDLL("advapi32.dll")
 	procOpenProcessToken         = modAdvapi32.NewProc("OpenProcessToken")
@@ -44,6 +45,12 @@ const (
 	PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 	MAX_PATH                          = 260
 	MAX_FULL_PATH                     = 4096
+
+	ES_AWAYMODE_REQUIRED = 0x00000040
+	ES_CONTINUOUS        = 0x80000000
+	ES_DISPLAY_REQUIRED  = 0x00000002
+	ES_SYSTEM_REQUIRED   = 0x00000001
+	ES_USER_PRESENT      = 0x00000004
 
 	PROC_TOKEN_DUPLICATE         = 0x0002
 	PROC_TOKEN_QUERY             = 0x0008
@@ -131,6 +138,15 @@ func newProcessData(e *PROCESSENTRY32, path string, user string) so.Process {
 		Fullpath:   path,
 		Username:   user,
 	}
+}
+
+func SetThreadExecutionState(state uint32) (uint32, error) {
+	res, _, err := procSetThreadExecutionState.Call(uintptr(state))
+	if err != nil {
+		return 0, err
+	}
+
+	return uint32(res), nil
 }
 
 func ProcessKill(pid uint32) (bool, error) {
