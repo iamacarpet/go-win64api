@@ -87,6 +87,11 @@ func getSoftwareList(baseKey string, arch string) ([]so.Software, error) {
 				swv.InstallLocation = ilocaction
 			}
 
+			ustring, _, err := sk.GetStringValue("UninstallString")
+			if err == nil {
+				swv.UninstallString = ustring
+			}
+
 			mver, _, err := sk.GetIntegerValue("VersionMajor")
 			if err == nil {
 				swv.VersionMajor = mver

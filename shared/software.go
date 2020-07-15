@@ -16,6 +16,7 @@ type Software struct {
 	HelpLink        string    `json:"HelpLink"`
 	InstallSource   string    `json:"InstallSource"`
 	InstallLocation string    `json:"InstallLocation"`
+	UninstallString string    `json:"UninstallString"`
 	VersionMajor    uint64    `json:"VersionMajor"`
 	VersionMinor    uint64    `json:"VersionMinor"`
 }
