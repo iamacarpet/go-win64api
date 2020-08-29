@@ -9,7 +9,7 @@ import (
 	"time"
 	"unsafe"
 
-	so "github.com/iamacarpet/go-win64api/shared"
+	so "github.com/kumako/go-win64api/shared"
 )
 
 var (

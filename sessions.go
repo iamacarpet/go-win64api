@@ -12,7 +12,7 @@ import (
 	"time"
 	"unsafe"
 
-	so "github.com/iamacarpet/go-win64api/shared"
+	so "github.com/kumako/go-win64api/shared"
 )
 
 var (
@@ -88,6 +88,7 @@ func ListLoggedInUsers() ([]so.SessionDetails, error) {
 							if uok, isAdmin := luidinmap(&data.LogonId, &PidLUIDList); uok {
 								uList = append(uList, sUser)
 								ud := so.SessionDetails{
+									SessionID:     data.Session,
 									Username:      strings.ToLower(LsatoString(data.UserName)),
 									Domain:        strLogonDomain,
 									LocalAdmin:    isAdmin,
