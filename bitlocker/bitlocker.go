@@ -1,6 +1,6 @@
 // +build windows,amd64
 
-package winapi
+package bitlocker
 
 import (
 	"fmt"
@@ -10,12 +10,12 @@ import (
 	so "github.com/iamacarpet/go-win64api/v2/shared"
 )
 
-func GetBitLockerRecoveryInfo() ([]*so.BitLockerDeviceInfo, error) {
-	return getBitLockerRecoveryInfoInternal("")
+func GetRecoveryInfo() ([]*so.BitLockerDeviceInfo, error) {
+	return getRecoveryInfoInternal("")
 }
 
-func GetBitLockerRecoveryInfoForDrive(driveLetter string) (*so.BitLockerDeviceInfo, error) {
-	result, err := getBitLockerRecoveryInfoInternal(" WHERE DriveLetter = '" + driveLetter + "'")
+func GetRecoveryInfoForDrive(driveLetter string) (*so.BitLockerDeviceInfo, error) {
+	result, err := getRecoveryInfoInternal(" WHERE DriveLetter = '" + driveLetter + "'")
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func GetBitLockerRecoveryInfoForDrive(driveLetter string) (*so.BitLockerDeviceIn
 	}
 }
 
-func getBitLockerRecoveryInfoInternal(where string) ([]*so.BitLockerDeviceInfo, error) {
+func getRecoveryInfoInternal(where string) ([]*so.BitLockerDeviceInfo, error) {
 	ole.CoInitialize(0)
 	defer ole.CoUninitialize()
 
@@ -66,7 +66,7 @@ func getBitLockerRecoveryInfoInternal(where string) ([]*so.BitLockerDeviceInfo, 
 	count := int(countVar.Val)
 
 	for i := 0; i < count; i++ {
-		retData, err := bitlockerRecoveryInfo(result, i)
+		retData, err := recoveryInfo(result, i)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +77,7 @@ func getBitLockerRecoveryInfoInternal(where string) ([]*so.BitLockerDeviceInfo, 
 	return retBitLocker, nil
 }
 
-func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInfo, error) {
+func recoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInfo, error) {
 	itemRaw, err := oleutil.CallMethod(result, "ItemIndex", i)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to fetch result row while processing BitLocker info. %s", err.Error())
