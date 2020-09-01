@@ -9,7 +9,7 @@ import (
 	ole "github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 
-	so "github.com/iamacarpet/go-win64api/shared"
+	so "github.com/iamacarpet/go-win64api/v2/shared"
 )
 
 var updateResultStatus []string = []string{
