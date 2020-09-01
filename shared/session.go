@@ -12,6 +12,7 @@ const (
 )
 
 type SessionDetails struct {
+	SessionID     uint32    `json:"sessionId"`
 	Username      string    `json:"username"`
 	Domain        string    `json:"domain"`
 	LocalUser     bool      `json:"isLocal"`
