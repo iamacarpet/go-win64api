@@ -1,3 +1,5 @@
+// +build windows,amd64
+
 package netapi32
 
 import "syscall"

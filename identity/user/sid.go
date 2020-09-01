@@ -1,37 +1,30 @@
 // +build windows,amd64
 
-package winapi
+package user
 
 import (
 	"fmt"
-	"os"
-	"strings"
 	"syscall"
 	"unsafe"
+
+	"github.com/iamacarpet/go-win64api/v2/internal"
+
+	"github.com/iamacarpet/go-win64api/v2/internal/libraries/advapi32"
+	"github.com/iamacarpet/go-win64api/v2/internal/libraries/kernel32"
 )
 
-var (
-	usrLookupAccountNameW     = modAdvapi32.NewProc("LookupAccountNameW")
-	usrConvertSidToStringSidW = modAdvapi32.NewProc("ConvertSidToStringSidW")
-
-	usrLocalFree = modKernel32.NewProc("LocalFree")
-)
-
-// GetRawSidForAccountName looks up the SID for a given account name using the
+// GetRawSid looks up the SID for a given account name using the
 // LookupAccountNameW system call.
 // The SID is returned as a buffer containing the raw _SID struct.
 //
 // See: https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-lookupaccountnamew
-func GetRawSidForAccountName(accountName string) ([]byte, error) {
-	if !strings.ContainsRune(accountName, '\\') {
-		hostname, err := os.Hostname()
-		if err != nil {
-			return nil, fmt.Errorf("failed to lookup hostname while fully qualifying account name: %v", err)
-		}
-		accountName = hostname + "\\" + accountName
+func GetRawSid(username string) ([]byte, error) {
+	username, err := internal.ResolveUsername(username)
+	if err != nil {
+		return nil, err
 	}
 
-	namePointer, err := syscall.UTF16PtrFromString(accountName)
+	namePointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert account name to UTF16: %v", err)
 	}
@@ -41,7 +34,7 @@ func GetRawSidForAccountName(accountName string) ([]byte, error) {
 	var eUse byte
 
 	// Get sizes first, which always returns failure.
-	_, _, err = usrLookupAccountNameW.Call(
+	_, _, err = advapi32.LookupAccountNameW.Call(
 		uintptr(0),                              // servername
 		uintptr(unsafe.Pointer(namePointer)),    // account name
 		uintptr(0),                              // SID
@@ -60,7 +53,7 @@ func GetRawSidForAccountName(accountName string) ([]byte, error) {
 	refDomain := make([]uint16, refDomainSize)
 
 	// Call for real this time
-	r1, _, err := usrLookupAccountNameW.Call(
+	r1, _, err := advapi32.LookupAccountNameW.Call(
 		uintptr(0),                              // servername
 		uintptr(unsafe.Pointer(namePointer)),    // account name
 		uintptr(unsafe.Pointer(&sidBuffer[0])),  // SID
@@ -92,7 +85,7 @@ func ConvertRawSidToStringSid(rawSid []byte) (string, error) {
 
 	var sidStringPtr uintptr
 
-	r1, _, err := usrConvertSidToStringSidW.Call(
+	r1, _, err := advapi32.ConvertSidToStringSidW.Call(
 		uintptr(unsafe.Pointer(&rawSid[0])),
 		uintptr(unsafe.Pointer(&sidStringPtr)),
 	)
@@ -104,7 +97,7 @@ func ConvertRawSidToStringSid(rawSid []byte) (string, error) {
 		return "", fmt.Errorf("ConvertSidToStringW returned null pointer")
 	}
 
-	defer usrLocalFree.Call(sidStringPtr)
+	defer kernel32.LocalFree.Call(sidStringPtr)
 
-	return UTF16toString((*uint16)(unsafe.Pointer(sidStringPtr))), nil
+	return internal.UTF16toString((*uint16)(unsafe.Pointer(sidStringPtr))), nil
 }

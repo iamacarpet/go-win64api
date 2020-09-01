@@ -20,7 +20,7 @@ func ResolveUsername(username string) (string, error) {
 	if !strings.ContainsRune(username, '\\') {
 		hn, err := os.Hostname()
 		if err != nil {
-			return "", fmt.Errorf("failed to get hostname: %s", err)
+			return "", fmt.Errorf("failed to lookup hostname while fully qualifying account name: %v", err)
 		}
 		username = hn + `\` + username
 	}
