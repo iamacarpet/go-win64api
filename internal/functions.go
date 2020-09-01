@@ -15,7 +15,7 @@ func UTF16toString(p *uint16) string {
 	return syscall.UTF16ToString((*[4096]uint16)(unsafe.Pointer(p))[:])
 }
 
-// GetResolved returns the full username in HOST\USER notation
+// ResolveUsername returns the full username in HOST\USER notation
 func ResolveUsername(username string) (string, error) {
 	if !strings.ContainsRune(username, '\\') {
 		hn, err := os.Hostname()
