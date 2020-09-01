@@ -1,6 +1,6 @@
 // +build windows,amd64
 
-package winapi
+package user
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/iamacarpet/go-win64api/v2/internal"
 	so "github.com/iamacarpet/go-win64api/v2/shared"
 )
 
@@ -137,7 +138,7 @@ type LOCALGROUP_MEMBERS_INFO_3 struct {
 //	- Comment		A comment to associate with the account (default: none)
 //	- ScriptPath 	If non-empty, the path to the user's logon script file, which can
 //					be a .CMD, .EXE, or .BAT file. (default: none)
-type UserAddOptions struct {
+type AddOptions struct {
 	// Required
 	Username string
 	Password string
@@ -150,10 +151,10 @@ type UserAddOptions struct {
 	ScriptPath string
 }
 
-// UserAddEx creates a new user account.
+// AddEx creates a new user account.
 // As opposed to the simpler UserAdd, UserAddEx allows specification of full
 // level 1 information while creating a user.
-func UserAddEx(opts UserAddOptions) (bool, error) {
+func AddEx(opts AddOptions) (bool, error) {
 	var parmErr uint32
 	var err error
 	uInfo := USER_INFO_1{
@@ -196,7 +197,7 @@ func UserAddEx(opts UserAddOptions) (bool, error) {
 		return false, fmt.Errorf("Unable to process: status=%d error=%d", ret, parmErr)
 	}
 	if opts.FullName != "" {
-		ok, err := UserUpdateFullname(opts.Username, opts.FullName)
+		ok, err := SetFullname(opts.Username, opts.FullName)
 		if err != nil {
 			return false, fmt.Errorf("Unable to set full name: %s", err)
 		}
@@ -208,11 +209,11 @@ func UserAddEx(opts UserAddOptions) (bool, error) {
 	return AddGroupMembership(opts.Username, "Users")
 }
 
-// UserAdd creates a new user account with the given username, full name, and
+// Add creates a new user account with the given username, full name, and
 // password.
 // The new account will have the standard User privilege level.
-func UserAdd(username string, fullname string, password string) (bool, error) {
-	return UserAddEx(UserAddOptions{
+func Add(username string, fullname string, password string) (bool, error) {
+	return AddEx(UserAddOptions{
 		Username:  username,
 		Password:  password,
 		FullName:  fullname,
@@ -220,8 +221,8 @@ func UserAdd(username string, fullname string, password string) (bool, error) {
 	})
 }
 
-// UserDelete deletes the user with the given username.
-func UserDelete(username string) (bool, error) {
+// Delete deletes the user with the given username.
+func Delete(username string) (bool, error) {
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
 		return false, fmt.Errorf("Unable to encode username to UTF16")
@@ -236,9 +237,9 @@ func UserDelete(username string) (bool, error) {
 	return true, nil
 }
 
-// IsLocalUserAdmin returns whether the user with the specified user name has
+// IsAdminLocal returns whether the user with the specified user name has
 // administration rights on the local machine.
-func IsLocalUserAdmin(username string) (bool, error) {
+func IsAdminLocal(username string) (bool, error) {
 	var dataPointer uintptr
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
@@ -265,9 +266,9 @@ func IsLocalUserAdmin(username string) (bool, error) {
 	}
 }
 
-// IsDomainUserAdmin returns whether the specified user is an administrator for
+// IsAdminActiveDirectory returns whether the specified user is an administrator for
 // the specified domain.
-func IsDomainUserAdmin(username string, domain string) (bool, error) {
+func IsAdminActiveDirectory(username string, domain string) (bool, error) {
 	var dataPointer uintptr
 	var dcPointer uintptr
 	uPointer, err := syscall.UTF16PtrFromString(username)
@@ -307,8 +308,53 @@ func IsDomainUserAdmin(username string, domain string) (bool, error) {
 	}
 }
 
-// ListLocalUsers lists information about local user accounts.
-func ListLocalUsers() ([]so.LocalUser, error) {
+// IsLockedActiveDirectory checks if a user is locked in AD
+func IsLockedActiveDirectory(username string, domain string) (bool, error) {
+	var dataPointer uintptr
+	var dcPointer uintptr
+	var servername uintptr
+
+	uPointer, err := syscall.UTF16PtrFromString(username)
+	if err != nil {
+		return false, fmt.Errorf("Unable to encode username to UTF16")
+	}
+
+	if domain != "" {
+		dPointer, err := syscall.UTF16PtrFromString(domain)
+		if err != nil {
+			return false, fmt.Errorf("Unable to encode domain to UTF16")
+		}
+
+		_, _, _ = usrNetGetAnyDCName.Call(
+			uintptr(0),                        // servername
+			uintptr(unsafe.Pointer(dPointer)), // domainame
+			uintptr(unsafe.Pointer(&dcPointer)),
+		)
+		servername = uintptr(dcPointer)
+		defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dcPointer)))
+	} else {
+		servername = uintptr(0)
+	}
+
+	_, _, _ = usrNetUserGetInfo.Call(
+		servername,                            // servername
+		uintptr(unsafe.Pointer(uPointer)),     // username
+		uintptr(uint32(2)),                    // level, request USER_INFO_2
+		uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
+	)
+	defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dataPointer)))
+
+	if dataPointer == uintptr(0) {
+		return false, fmt.Errorf("Unable to get data structure.")
+	}
+
+	data := (*USER_INFO_2)(unsafe.Pointer(dataPointer))
+
+	return (data.Usri2_flags & USER_UF_LOCKOUT) == USER_UF_LOCKOUT, nil
+}
+
+// GetList lists information about local user accounts.
+func GetList() ([]so.LocalUser, error) {
 	var (
 		dataPointer  uintptr
 		resumeHandle uintptr
@@ -339,8 +385,8 @@ func ListLocalUsers() ([]so.LocalUser, error) {
 		var data = (*USER_INFO_2)(unsafe.Pointer(iter))
 
 		ud := so.LocalUser{
-			Username:         UTF16toString(data.Usri2_name),
-			FullName:         UTF16toString(data.Usri2_full_name),
+			Username:         internal.UTF16toString(data.Usri2_name),
+			FullName:         internal.UTF16toString(data.Usri2_full_name),
 			PasswordAge:      (time.Duration(data.Usri2_password_age) * time.Second),
 			LastLogon:        time.Unix(int64(data.Usri2_last_logon), 0),
 			BadPasswordCount: data.Usri2_bad_pw_count,
@@ -427,8 +473,8 @@ func RemoveGroupMembership(username, groupname string) (bool, error) {
 	return true, nil
 }
 
-// SetAdmin adds the user to the "Administrators" group.
-func SetAdmin(username string) (bool, error) {
+// GrantAdmin adds the user to the "Administrators" group.
+func GrantAdmin(username string) (bool, error) {
 	return AddGroupMembership(username, "Administrators")
 }
 
@@ -437,8 +483,8 @@ func RevokeAdmin(username string) (bool, error) {
 	return RemoveGroupMembership(username, "Administrators")
 }
 
-// UserUpdateFullName changes the full name attached to the user's account.
-func UserUpdateFullname(username string, fullname string) (bool, error) {
+// SetFullname changes the full name attached to the user's account.
+func SetFullname(username string, fullname string) (bool, error) {
 	var errParam uint32
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
@@ -461,8 +507,8 @@ func UserUpdateFullname(username string, fullname string) (bool, error) {
 	return true, nil
 }
 
-// ChangePassword changes the user's password.
-func ChangePassword(username string, password string) (bool, error) {
+// SetPassword changes the user's password.
+func SetPassword(username string, password string) (bool, error) {
 	var errParam uint32
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
@@ -485,106 +531,8 @@ func ChangePassword(username string, password string) (bool, error) {
 	return true, nil
 }
 
-// UserDisabled adds or removes the flag that disables a user's account, preventing
-// them from logging in.
-// If disable is true, the user's account is disabled.
-// If disable is false, the user's account is enabled.
-func UserDisabled(username string, disable bool) (bool, error) {
-	if disable {
-		return userAddFlags(username, USER_UF_ACCOUNTDISABLE)
-	} else {
-		return userDelFlags(username, USER_UF_ACCOUNTDISABLE)
-	}
-}
-
-// UserPasswordNoExpires adds or removes the flag that determines whether the
-// user's password expires.
-// If noexpire is true, the user's password will not expire.
-// If noexpire is false, the user's password will expire according to the system's
-// password policy.
-func UserPasswordNoExpires(username string, noexpire bool) (bool, error) {
-	if noexpire {
-		return userAddFlags(username, USER_UF_DONT_EXPIRE_PASSWD)
-	} else {
-		return userDelFlags(username, USER_UF_DONT_EXPIRE_PASSWD)
-	}
-}
-
-// UserDisablePasswordChange adds or removes the flag that determines whether the
-// user is allowed to change their own password.
-// If disabled is true, the user will be unable to change their own password.
-// If disabled is false, the user will be allowed to change their own password.
-func UserDisablePasswordChange(username string, disabled bool) (bool, error) {
-	if disabled {
-		return userAddFlags(username, USER_UF_PASSWD_CANT_CHANGE)
-	} else {
-		return userDelFlags(username, USER_UF_PASSWD_CANT_CHANGE)
-	}
-}
-
-func userGetFlags(username string) (uint32, error) {
-	var dataPointer uintptr
-	uPointer, err := syscall.UTF16PtrFromString(username)
-	if err != nil {
-		return 0, fmt.Errorf("unable to encode username to UTF16")
-	}
-	_, _, _ = usrNetUserGetInfo.Call(
-		uintptr(0),                            // servername
-		uintptr(unsafe.Pointer(uPointer)),     // username
-		uintptr(uint32(1)),                    // level, request USER_INFO_1
-		uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
-	)
-	defer usrNetApiBufferFree.Call(dataPointer)
-
-	if dataPointer == uintptr(0) {
-		return 0, fmt.Errorf("unable to get data structure")
-	}
-
-	var data = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
-
-	fmt.Printf("existing user flags: %d\r\n", data.Usri1_flags)
-	return data.Usri1_flags, nil
-}
-
-func userSetFlags(username string, flags uint32) (bool, error) {
-	var errParam uint32
-	uPointer, err := syscall.UTF16PtrFromString(username)
-	if err != nil {
-		return false, fmt.Errorf("Unable to encode username to UTF16")
-	}
-	ret, _, _ := usrNetUserSetInfo.Call(
-		uintptr(0),                        // servername
-		uintptr(unsafe.Pointer(uPointer)), // username
-		uintptr(uint32(1008)),             // level
-		uintptr(unsafe.Pointer(&USER_INFO_1008{Usri1008_flags: flags})),
-		uintptr(unsafe.Pointer(&errParam)),
-	)
-	if ret != NET_API_STATUS_NERR_Success {
-		return false, fmt.Errorf("Unable to process. %d", ret)
-	}
-	return true, nil
-}
-
-func userAddFlags(username string, flags uint32) (bool, error) {
-	eFlags, err := userGetFlags(username)
-	if err != nil {
-		return false, fmt.Errorf("Error while getting existing flags, %s.", err.Error())
-	}
-	eFlags |= flags // add supplied bits to mask.
-	return userSetFlags(username, eFlags)
-}
-
-func userDelFlags(username string, flags uint32) (bool, error) {
-	eFlags, err := userGetFlags(username)
-	if err != nil {
-		return false, fmt.Errorf("Error while getting existing flags, %s.", err.Error())
-	}
-	eFlags &^= flags // clear bits we want to remove.
-	return userSetFlags(username, eFlags)
-}
-
-// UserSetProfile sets the profile path for the user to path.
-func UserSetProfile(username string, path string) (bool, error) {
+// SetProfilePath sets the profile path for the user to path.
+func SetProfilePath(username string, path string) (bool, error) {
 	var errParam uint32
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
@@ -608,51 +556,100 @@ func UserSetProfile(username string, path string) (bool, error) {
 	return true, nil
 }
 
-// UTF16toString converts a pointer to a UTF16 string into a Go string.
-func UTF16toString(p *uint16) string {
-	return syscall.UTF16ToString((*[4096]uint16)(unsafe.Pointer(p))[:])
+// SetFlagDisabled adds or removes the flag that disables a user's account, preventing
+// them from logging in.
+// If disable is true, the user's account is disabled.
+// If disable is false, the user's account is enabled.
+func SetFlagDisabled(username string, disable bool) (bool, error) {
+	if disable {
+		return addFlags(username, USER_UF_ACCOUNTDISABLE)
+	} else {
+		return delFlags(username, USER_UF_ACCOUNTDISABLE)
+	}
 }
 
-func DomainUserLocked(username string, domain string) (bool, error) {
-	var dataPointer uintptr
-	var dcPointer uintptr
-	var servername uintptr
+// SetFlagPasswordNeverExpires adds or removes the flag that determines whether the
+// user's password expires.
+// If noexpire is true, the user's password will not expire.
+// If noexpire is false, the user's password will expire according to the system's
+// password policy.
+func SetFlagPasswordNeverExpires(username string, noexpire bool) (bool, error) {
+	if noexpire {
+		return addFlags(username, USER_UF_DONT_EXPIRE_PASSWD)
+	} else {
+		return delFlags(username, USER_UF_DONT_EXPIRE_PASSWD)
+	}
+}
 
+// SetFlagDisablePasswordChange adds or removes the flag that determines whether the
+// user is allowed to change their own password.
+// If disabled is true, the user will be unable to change their own password.
+// If disabled is false, the user will be allowed to change their own password.
+func SetFlagDisablePasswordChange(username string, disabled bool) (bool, error) {
+	if disabled {
+		return addFlags(username, USER_UF_PASSWD_CANT_CHANGE)
+	} else {
+		return delFlags(username, USER_UF_PASSWD_CANT_CHANGE)
+	}
+}
+
+func getFlags(username string) (uint32, error) {
+	var dataPointer uintptr
+	uPointer, err := syscall.UTF16PtrFromString(username)
+	if err != nil {
+		return 0, fmt.Errorf("unable to encode username to UTF16")
+	}
+	_, _, _ = usrNetUserGetInfo.Call(
+		uintptr(0),                            // servername
+		uintptr(unsafe.Pointer(uPointer)),     // username
+		uintptr(uint32(1)),                    // level, request USER_INFO_1
+		uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
+	)
+	defer usrNetApiBufferFree.Call(dataPointer)
+
+	if dataPointer == uintptr(0) {
+		return 0, fmt.Errorf("unable to get data structure")
+	}
+
+	var data = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
+
+	fmt.Printf("existing user flags: %d\r\n", data.Usri1_flags)
+	return data.Usri1_flags, nil
+}
+
+func setFlags(username string, flags uint32) (bool, error) {
+	var errParam uint32
 	uPointer, err := syscall.UTF16PtrFromString(username)
 	if err != nil {
 		return false, fmt.Errorf("Unable to encode username to UTF16")
 	}
-
-	if domain != "" {
-		dPointer, err := syscall.UTF16PtrFromString(domain)
-		if err != nil {
-			return false, fmt.Errorf("Unable to encode domain to UTF16")
-		}
-
-		_, _, _ = usrNetGetAnyDCName.Call(
-			uintptr(0),                        // servername
-			uintptr(unsafe.Pointer(dPointer)), // domainame
-			uintptr(unsafe.Pointer(&dcPointer)),
-		)
-		servername = uintptr(dcPointer)
-		defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dcPointer)))
-	} else {
-		servername = uintptr(0)
-	}
-
-	_, _, _ = usrNetUserGetInfo.Call(
-		servername,                            // servername
-		uintptr(unsafe.Pointer(uPointer)),     // username
-		uintptr(uint32(2)),                    // level, request USER_INFO_2
-		uintptr(unsafe.Pointer(&dataPointer)), // Pointer to struct.
+	ret, _, _ := usrNetUserSetInfo.Call(
+		uintptr(0),                        // servername
+		uintptr(unsafe.Pointer(uPointer)), // username
+		uintptr(uint32(1008)),             // level
+		uintptr(unsafe.Pointer(&USER_INFO_1008{Usri1008_flags: flags})),
+		uintptr(unsafe.Pointer(&errParam)),
 	)
-	defer usrNetApiBufferFree.Call(uintptr(unsafe.Pointer(dataPointer)))
-
-	if dataPointer == uintptr(0) {
-		return false, fmt.Errorf("Unable to get data structure.")
+	if ret != NET_API_STATUS_NERR_Success {
+		return false, fmt.Errorf("Unable to process. %d", ret)
 	}
+	return true, nil
+}
 
-	data := (*USER_INFO_2)(unsafe.Pointer(dataPointer))
+func addFlags(username string, flags uint32) (bool, error) {
+	eFlags, err := getFlags(username)
+	if err != nil {
+		return false, fmt.Errorf("Error while getting existing flags, %s.", err.Error())
+	}
+	eFlags |= flags // add supplied bits to mask.
+	return setFlags(username, eFlags)
+}
 
-	return (data.Usri2_flags & USER_UF_LOCKOUT) == USER_UF_LOCKOUT, nil
+func delFlags(username string, flags uint32) (bool, error) {
+	eFlags, err := getFlags(username)
+	if err != nil {
+		return false, fmt.Errorf("Error while getting existing flags, %s.", err.Error())
+	}
+	eFlags &^= flags // clear bits we want to remove.
+	return setFlags(username, eFlags)
 }
