@@ -13,6 +13,17 @@ import (
 	"github.com/iamacarpet/go-win64api/v2/internal/libraries/kernel32"
 )
 
+// GetSid looks up the SID for a given account name
+// and converts the raw representation to a string
+func GetSid(username string) (string, error) {
+	raw, err := GetRawSid(username)
+	if err != nil {
+		return "", err
+	}
+
+	return ConvertRawSidToStringSid(raw)
+}
+
 // GetRawSid looks up the SID for a given account name using the
 // LookupAccountNameW system call.
 // The SID is returned as a buffer containing the raw _SID struct.
