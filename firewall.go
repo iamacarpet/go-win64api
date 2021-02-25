@@ -102,12 +102,12 @@ func (r *FWRule) InProfiles() FWProfiles {
 //   NET_FW_PROFILE2_CURRENT // adds rule to currently used FW Profile(-s)
 //   NET_FW_PROFILE2_ALL // adds rule to all profiles
 //   NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE // rule in Private and Domain profile
-func FirewallRuleAdd(name, description, group, ports string, protocol, profile int32) (bool, error) {
+func FirewallRuleAdd(name, description, group, ports string, protocol, action, profile int32) (bool, error) {
 
 	if ports == "" {
 		return false, fmt.Errorf("empty FW Rule ports, it is mandatory")
 	}
-	return firewallRuleAdd(name, description, group, "", "", ports, "", "", "", "", protocol, 0, profile, true, false)
+	return firewallRuleAdd(name, description, group, "", "", ports, "", "", "", "", protocol, 0, action, profile, true, false)
 }
 
 // FirewallRuleAddApplication creates Inbound rule for given application.
@@ -128,16 +128,16 @@ func FirewallRuleAdd(name, description, group, ports string, protocol, profile i
 //   NET_FW_PROFILE2_CURRENT // adds rule to currently used FW Profile
 //   NET_FW_PROFILE2_ALL // adds rule to all profiles
 //   NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE // rule in Private and Domain profile
-func FirewallRuleAddApplication(name, description, group, appPath string, profile int32) (bool, error) {
+func FirewallRuleAddApplication(name, description, group, appPath string, action, profile int32) (bool, error) {
 	if appPath == "" {
 		return false, fmt.Errorf("empty FW Rule appPath, it is mandatory")
 	}
-	return firewallRuleAdd(name, description, group, appPath, "", "", "", "", "", "", 0, 0, profile, true, false)
+	return firewallRuleAdd(name, description, group, appPath, "", "", "", "", "", "", 0, 0, action, profile, true, false)
 }
 
 // FirewallRuleCreate is deprecated, use FirewallRuleAddApplication instead.
-func FirewallRuleCreate(name, description, group, appPath, port string, protocol int32) (bool, error) {
-	return firewallRuleAdd(name, description, group, appPath, "", port, "", "", "", "", protocol, 0, NET_FW_PROFILE2_CURRENT, true, false)
+func FirewallRuleCreate(name, description, group, appPath, port string, protocol, action int32) (bool, error) {
+	return firewallRuleAdd(name, description, group, appPath, "", port, "", "", "", "", protocol, 0, action, NET_FW_PROFILE2_CURRENT, true, false)
 }
 
 // FirewallPingEnable creates Inbound ICMPv4 rule which allows to answer echo requests.
@@ -156,7 +156,7 @@ func FirewallRuleCreate(name, description, group, appPath, port string, protocol
 //   NET_FW_PROFILE2_ALL // adds rule to all profiles
 //   NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE // rule in Private and Domain profile
 func FirewallPingEnable(name, description, group, remoteAddresses string, profile int32) (bool, error) {
-	return firewallRuleAdd(name, description, group, "", "", "", "", "", remoteAddresses, "8:*", NET_FW_IP_PROTOCOL_ICMPv4, 0, profile, true, false)
+	return firewallRuleAdd(name, description, group, "", "", "", "", "", remoteAddresses, "8:*", NET_FW_IP_PROTOCOL_ICMPv4, 0, 1, profile, true, false)
 }
 
 // FirewallRuleAddAdvanced allows to modify almost all available FW Rule parameters.
@@ -167,7 +167,7 @@ func FirewallPingEnable(name, description, group, remoteAddresses string, profil
 func FirewallRuleAddAdvanced(rule FWRule) (bool, error) {
 	return firewallRuleAdd(rule.Name, rule.Description, rule.Grouping, rule.ApplicationName, rule.ServiceName,
 		rule.LocalPorts, rule.RemotePorts, rule.LocalAddresses, rule.RemoteAddresses, rule.ICMPTypesAndCodes,
-		rule.Protocol, rule.Direction, rule.Profiles, rule.Enabled, rule.EdgeTraversal)
+		rule.Protocol, rule.Direction, rule.Action, rule.Profiles, rule.Enabled, rule.EdgeTraversal)
 }
 
 // FirewallRuleDelete allows you to delete existing rule by name.
@@ -561,7 +561,7 @@ func firewallParseProfiles(v int32) FWProfiles {
 }
 
 // firewallRuleAdd is universal function to add all kinds of rules.
-func firewallRuleAdd(name, description, group, appPath, serviceName, ports, remotePorts, localAddresses, remoteAddresses, icmpTypes string, protocol, direction, profile int32, enabled, edgeTraversal bool) (bool, error) {
+func firewallRuleAdd(name, description, group, appPath, serviceName, ports, remotePorts, localAddresses, remoteAddresses, icmpTypes string, protocol, direction, action, profile int32, enabled, edgeTraversal bool) (bool, error) {
 
 	if name == "" {
 		return false, fmt.Errorf("empty FW Rule name, name is mandatory")
@@ -667,7 +667,7 @@ func firewallRuleAdd(name, description, group, appPath, serviceName, ports, remo
 	if _, err := oleutil.PutProperty(fwRule, "Profiles", profile); err != nil {
 		return false, fmt.Errorf("Error setting property (Profiles) of Rule: %s", err)
 	}
-	if _, err := oleutil.PutProperty(fwRule, "Action", NET_FW_ACTION_ALLOW); err != nil {
+	if _, err := oleutil.PutProperty(fwRule, "Action", action); err != nil {
 		return false, fmt.Errorf("Error setting property (Action) of Rule: %s", err)
 	}
 	if edgeTraversal {

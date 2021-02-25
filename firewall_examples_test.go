@@ -9,7 +9,7 @@ import (
 
 func ExampleFirewallRuleAdd() {
 	ok, err := FirewallRuleAdd("SQL Server", "Main static SQL Server port 1433", "SQL services", "1433",
-		NET_FW_IP_PROTOCOL_TCP, NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE)
+		NET_FW_IP_PROTOCOL_TCP, NET_FW_ACTION_ALLOW, NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE)
 	if ok {
 		fmt.Println("Firewall rule created!")
 	} else {
@@ -23,7 +23,7 @@ func ExampleFirewallRuleAdd() {
 
 func ExampleFirewallRuleAddApplication() {
 	_, err := FirewallRuleAddApplication("SQL Browser App", "App rule for SQL Browser", "SQL Services",
-		`%ProgramFiles% (x86)\Microsoft SQL Server\90\Shared\sqlbrowser.exe`, NET_FW_PROFILE2_CURRENT)
+		`%ProgramFiles% (x86)\Microsoft SQL Server\90\Shared\sqlbrowser.exe`, NET_FW_ACTION_ALLOW, NET_FW_PROFILE2_CURRENT)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -64,6 +64,7 @@ func ExampleFirewallRuleAddAdvanced_iPv6Ping() {
 		Grouping:          "My group",
 		Enabled:           true,
 		Protocol:          NET_FW_IP_PROTOCOL_ICMPv6,
+		Action:            NET_FW_ACTION_ALLOW,
 		ICMPTypesAndCodes: "128:*", // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml
 	}
 
@@ -95,6 +96,7 @@ func ExampleFirewallRuleAddAdvanced_restrictedLocalPorts() {
 		Protocol:        NET_FW_IP_PROTOCOL_TCP,
 		LocalPorts:      "1234",
 		ApplicationName: `C:\Test\myApp`,
+		Action:          NET_FW_ACTION_ALLOW,
 		Profiles:        NET_FW_PROFILE2_PRIVATE | NET_FW_PROFILE2_DOMAIN, // let's enable it in 2 profiles
 	}
 
@@ -125,6 +127,7 @@ func ExampleFirewallRuleAddAdvanced_serviceRule() {
 		Enabled:     true,
 		Protocol:    NET_FW_IP_PROTOCOL_ANY,
 		ServiceName: "SQLBrowser",
+		Action:      NET_FW_ACTION_ALLOW,
 		Profiles:    NET_FW_PROFILE2_CURRENT, // let's enable it in currently used profiles
 	}
 
