@@ -10,58 +10,139 @@ import (
 	so "github.com/iamacarpet/go-win64api/shared"
 )
 
+// GetBitLockerConversionStatus returns the Bitlocker conversion status for all local drives.
+func GetBitLockerConversionStatus() ([]*so.BitLockerConversionStatus, error) {
+	ole.CoInitialize(0)
+	defer ole.CoUninitialize()
+
+	return getBitLockerConversionStatusInternal("")
+}
+
+// GetBitLockerConversionStatusForDrive returns the Bitlocker conversion status for a specific drive.
+func GetBitLockerConversionStatusForDrive(driveLetter string) (*so.BitLockerConversionStatus, error) {
+	ole.CoInitialize(0)
+	defer ole.CoUninitialize()
+
+	result, err := getBitLockerConversionStatusInternal(" WHERE DriveLetter = '" + driveLetter + "'")
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result) < 1 {
+		return nil, fmt.Errorf("error getting BitLocker conversion status, drive not found: %s", driveLetter)
+	} else if len(result) > 1 {
+		return nil, fmt.Errorf("error getting BitLocker conversion status, too many results: %s", driveLetter)
+	} else {
+		return result[0], err
+	}
+}
+
+// GetBitLockerRecoveryInfo returns the Bitlocker device info for all local drives.
 func GetBitLockerRecoveryInfo() ([]*so.BitLockerDeviceInfo, error) {
+	ole.CoInitialize(0)
+	defer ole.CoUninitialize()
+
 	return getBitLockerRecoveryInfoInternal("")
 }
 
+// GetBitLockerRecoveryInfoForDrive returns the Bitlocker device info for a specific drive.
 func GetBitLockerRecoveryInfoForDrive(driveLetter string) (*so.BitLockerDeviceInfo, error) {
+	ole.CoInitialize(0)
+	defer ole.CoUninitialize()
+
 	result, err := getBitLockerRecoveryInfoInternal(" WHERE DriveLetter = '" + driveLetter + "'")
 	if err != nil {
 		return nil, err
 	}
 
 	if len(result) < 1 {
-		return nil, fmt.Errorf("Error getting BitLocker Recovery Info, Drive not found: %s", driveLetter)
+		return nil, fmt.Errorf("error getting BitLocker Recovery Info, drive not found: %s", driveLetter)
 	} else if len(result) > 1 {
-		return nil, fmt.Errorf("Error getting BitLocker Recovery Info, Too many results: %s", driveLetter)
+		return nil, fmt.Errorf("error getting BitLocker Recovery Info, too many results: %s", driveLetter)
 	} else {
 		return result[0], err
 	}
 }
 
-func getBitLockerRecoveryInfoInternal(where string) ([]*so.BitLockerDeviceInfo, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+type wmi struct {
+	intf *ole.IDispatch
+	svc  *ole.IDispatch
+}
 
+func (w *wmi) Connect() error {
 	unknown, err := oleutil.CreateObject("WbemScripting.SWbemLocator")
 	if err != nil {
-		return nil, fmt.Errorf("Unable to create initial object, %s", err.Error())
+		return fmt.Errorf("unable to create initial object, %w", err)
 	}
 	defer unknown.Release()
-	wmi, err := unknown.QueryInterface(ole.IID_IDispatch)
+	w.intf, err = unknown.QueryInterface(ole.IID_IDispatch)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to create initial object, %s", err.Error())
+		return fmt.Errorf("unable to create initial object, %w", err)
 	}
-	defer wmi.Release()
-	serviceRaw, err := oleutil.CallMethod(wmi, "ConnectServer", nil, `\\.\ROOT\CIMV2\Security\MicrosoftVolumeEncryption`)
+	serviceRaw, err := oleutil.CallMethod(w.intf, "ConnectServer", nil, `\\.\ROOT\CIMV2\Security\MicrosoftVolumeEncryption`)
 	if err != nil {
-		return nil, fmt.Errorf("Permission Denied - %s", err)
+		return fmt.Errorf("permission denied: %w", err)
 	}
-	service := serviceRaw.ToIDispatch()
-	defer service.Release()
+	w.svc = serviceRaw.ToIDispatch()
+	return nil
+}
 
-	resultRaw, err := oleutil.CallMethod(service, "ExecQuery", "SELECT * FROM Win32_EncryptableVolume"+where)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to execute query while getting BitLocker info. %s", err.Error())
+func (w *wmi) Close() {
+	w.svc.Release()
+	w.intf.Release()
+}
+
+func getBitLockerConversionStatusInternal(where string) ([]*so.BitLockerConversionStatus, error) {
+	w := &wmi{}
+	if err := w.Connect(); err != nil {
+		return nil, fmt.Errorf("wmi.Connect: %w", err)
 	}
-	result := resultRaw.ToIDispatch()
+	defer w.Close()
+	raw, err := oleutil.CallMethod(w.svc, "ExecQuery", "SELECT * FROM Win32_EncryptableVolume"+where)
+	if err != nil {
+		return nil, fmt.Errorf("ExecQuery: %w", err)
+	}
+	result := raw.ToIDispatch()
+	defer result.Release()
+
+	ret := []*so.BitLockerConversionStatus{}
+
+	countVar, err := oleutil.GetProperty(result, "Count")
+	if err != nil {
+		return nil, fmt.Errorf("unable to get property Count while processing BitLocker info: %w", err)
+	}
+	count := int(countVar.Val)
+
+	for i := 0; i < count; i++ {
+		retData, err := bitlockerConversionStatus(result, i)
+		if err != nil {
+			return nil, err
+		}
+
+		ret = append(ret, retData)
+	}
+
+	return ret, nil
+}
+
+func getBitLockerRecoveryInfoInternal(where string) ([]*so.BitLockerDeviceInfo, error) {
+	w := &wmi{}
+	if err := w.Connect(); err != nil {
+		return nil, fmt.Errorf("wmi.Connect: %w", err)
+	}
+	defer w.Close()
+	raw, err := oleutil.CallMethod(w.svc, "ExecQuery", "SELECT * FROM Win32_EncryptableVolume"+where)
+	if err != nil {
+		return nil, fmt.Errorf("ExecQuery: %w", err)
+	}
+	result := raw.ToIDispatch()
 	defer result.Release()
 
 	retBitLocker := []*so.BitLockerDeviceInfo{}
 
 	countVar, err := oleutil.GetProperty(result, "Count")
 	if err != nil {
-		return nil, fmt.Errorf("Unable to get property Count while processing BitLocker info. %s", err.Error())
+		return nil, fmt.Errorf("unable to get property Count while processing BitLocker info: %w", err)
 	}
 	count := int(countVar.Val)
 
@@ -77,10 +158,55 @@ func getBitLockerRecoveryInfoInternal(where string) ([]*so.BitLockerDeviceInfo, 
 	return retBitLocker, nil
 }
 
+func bitlockerConversionStatus(result *ole.IDispatch, i int) (*so.BitLockerConversionStatus, error) {
+	itemRaw, err := oleutil.CallMethod(result, "ItemIndex", i)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch result row while processing BitLocker info. %w", err)
+	}
+	item := itemRaw.ToIDispatch()
+	defer item.Release()
+
+	retData := &so.BitLockerConversionStatus{}
+
+	// https://docs.microsoft.com/en-us/windows/win32/secprov/getconversionstatus-win32-encryptablevolume
+	var conversionStatus ole.VARIANT
+	ole.VariantInit(&conversionStatus)
+	var encryptionPercentage ole.VARIANT
+	ole.VariantInit(&encryptionPercentage)
+	var encryptionFlags ole.VARIANT
+	ole.VariantInit(&encryptionFlags)
+	var wipingStatus ole.VARIANT
+	ole.VariantInit(&wipingStatus)
+	var wipingPercentage ole.VARIANT
+	ole.VariantInit(&wipingPercentage)
+	statusResultRaw, err := oleutil.CallMethod(
+		item, "GetConversionStatus",
+		&conversionStatus,
+		&encryptionPercentage,
+		&encryptionFlags,
+		&wipingStatus,
+		&wipingPercentage,
+		0,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get conversion status while getting BitLocker info: %w", err)
+	} else if val, ok := statusResultRaw.Value().(int32); val != 0 || !ok {
+		return nil, fmt.Errorf("unable to get conversion status while getting BitLocker info. Return code %d", val)
+	}
+
+	retData.ConversionStatus = conversionStatus.Value().(int32)
+	retData.EncryptionPercentage = encryptionPercentage.Value().(int32)
+	retData.EncryptionFlags = encryptionFlags.Value().(int32)
+	retData.WipingStatus = wipingStatus.Value().(int32)
+	retData.WipingPercentage = wipingPercentage.Value().(int32)
+
+	return retData, nil
+}
+
 func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInfo, error) {
 	itemRaw, err := oleutil.CallMethod(result, "ItemIndex", i)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to fetch result row while processing BitLocker info. %s", err.Error())
+		return nil, fmt.Errorf("failed to fetch result row while processing BitLocker info. %w", err)
 	}
 	item := itemRaw.ToIDispatch()
 	defer item.Release()
@@ -91,13 +217,13 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 
 	resDeviceID, err := oleutil.GetProperty(item, "DeviceID")
 	if err != nil {
-		return nil, fmt.Errorf("Error while getting property DeviceID from BitLocker info. %s", err.Error())
+		return nil, fmt.Errorf("Error while getting property DeviceID rom BitLocker info. %s", err.Error())
 	}
 	retData.DeviceID = resDeviceID.ToString()
 
 	resPersistentVolumeID, err := oleutil.GetProperty(item, "PersistentVolumeID")
 	if err != nil {
-		return nil, fmt.Errorf("Error while getting property PersistentVolumeID from BitLocker info. %s", err.Error())
+		return nil, fmt.Errorf("Error while getting property PersistentVolumeID rom BitLocker info. %s", err.Error())
 	}
 	retData.PersistentVolumeID = resPersistentVolumeID.ToString()
 
@@ -119,7 +245,7 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 
 	resConversionStatus, err := oleutil.GetProperty(item, "ConversionStatus")
 	if err != nil {
-		return nil, fmt.Errorf("Error while getting property ConversionStatus from BitLocker info. %s", err.Error())
+		return nil, fmt.Errorf("error while getting property ConversionStatus from BitLocker info: %w", err)
 	}
 	ok = false
 	retData.ConversionStatus, ok = resConversionStatus.Value().(int32)
@@ -131,7 +257,7 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 	ole.VariantInit(&keyProtectorResults)
 	keyIDResultRaw, err := oleutil.CallMethod(item, "GetKeyProtectors", 3, &keyProtectorResults)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to get Key Protectors while getting BitLocker info. %s", err.Error())
+		return nil, fmt.Errorf("Unable to get Key Protectors whie getting BitLocker info. %s", err.Error())
 	} else if val, ok := keyIDResultRaw.Value().(int32); val != 0 || !ok {
 		return nil, fmt.Errorf("Unable to get Key Protectors while getting BitLocker info. Return code %d", val)
 	}
