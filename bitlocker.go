@@ -161,7 +161,7 @@ func getBitLockerRecoveryInfoInternal(where string) ([]*so.BitLockerDeviceInfo, 
 func bitlockerConversionStatus(result *ole.IDispatch, i int) (*so.BitLockerConversionStatus, error) {
 	itemRaw, err := oleutil.CallMethod(result, "ItemIndex", i)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch result row while processing BitLocker info. %w", err)
+		return nil, fmt.Errorf("failed to fetch result row while processing BitLocker info: %w", err)
 	}
 	item := itemRaw.ToIDispatch()
 	defer item.Release()
@@ -217,13 +217,13 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 
 	resDeviceID, err := oleutil.GetProperty(item, "DeviceID")
 	if err != nil {
-		return nil, fmt.Errorf("Error while getting property DeviceID rom BitLocker info. %s", err.Error())
+		return nil, fmt.Errorf("Error while getting property DeviceID from BitLocker info. %s", err.Error())
 	}
 	retData.DeviceID = resDeviceID.ToString()
 
 	resPersistentVolumeID, err := oleutil.GetProperty(item, "PersistentVolumeID")
 	if err != nil {
-		return nil, fmt.Errorf("Error while getting property PersistentVolumeID rom BitLocker info. %s", err.Error())
+		return nil, fmt.Errorf("Error while getting property PersistentVolumeID from BitLocker info. %s", err.Error())
 	}
 	retData.PersistentVolumeID = resPersistentVolumeID.ToString()
 
@@ -257,7 +257,7 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 	ole.VariantInit(&keyProtectorResults)
 	keyIDResultRaw, err := oleutil.CallMethod(item, "GetKeyProtectors", 3, &keyProtectorResults)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to get Key Protectors whie getting BitLocker info. %s", err.Error())
+		return nil, fmt.Errorf("Unable to get Key Protectors while getting BitLocker info. %s", err.Error())
 	} else if val, ok := keyIDResultRaw.Value().(int32); val != 0 || !ok {
 		return nil, fmt.Errorf("Unable to get Key Protectors while getting BitLocker info. Return code %d", val)
 	}
