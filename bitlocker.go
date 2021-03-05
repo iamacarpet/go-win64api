@@ -10,6 +10,54 @@ import (
 	so "github.com/iamacarpet/go-win64api/shared"
 )
 
+// BackupBitLockerRecoveryKeys backups up volume recovery information to Active Directory.
+// Requires one or more PersistentVolumeIDs, available from GetBitLockerRecoveryInfo.
+//
+// Ref: https://docs.microsoft.com/en-us/windows/win32/secprov/backuprecoveryinformationtoactivedirectory-win32-encryptablevolume
+func BackupBitLockerRecoveryKeys(persistentVolumeIDs []string) error {
+	ole.CoInitialize(0)
+	defer ole.CoUninitialize()
+
+	w := &wmi{}
+	if err := w.Connect(); err != nil {
+		return fmt.Errorf("wmi.Connect: %w", err)
+	}
+	defer w.Close()
+
+	for _, pvid := range persistentVolumeIDs {
+		raw, err := oleutil.CallMethod(w.svc, "ExecQuery",
+			fmt.Sprintf(`SELECT * FROM Win32_EncryptableVolume WHERE PersistentVolumeID="%s"`, pvid),
+		)
+		if err != nil {
+			return fmt.Errorf("ExecQuery: %w", err)
+		}
+		result := raw.ToIDispatch()
+		defer result.Release()
+
+		itemRaw, err := oleutil.CallMethod(result, "ItemIndex", 0)
+		if err != nil {
+			return fmt.Errorf("failed to fetch result row while processing BitLocker info: %w", err)
+		}
+		item := itemRaw.ToIDispatch()
+		defer item.Release()
+
+		keys, err := getKeyProtectors(item)
+		if err != nil {
+			return fmt.Errorf("getKeyProtectors: %w", err)
+		}
+
+		for _, k := range keys {
+			statusResultRaw, err := oleutil.CallMethod(item, "BackupRecoveryInformationToActiveDirectory", k)
+			if err != nil {
+				return fmt.Errorf("unable to backup bitlocker information to active directory: %w", err)
+			} else if val, ok := statusResultRaw.Value().(int32); val != 0 || !ok {
+				return fmt.Errorf("invalid result while backing up bitlocker information to active directory: %v", val)
+			}
+		}
+	}
+	return nil
+}
+
 // GetBitLockerConversionStatus returns the Bitlocker conversion status for all local drives.
 func GetBitLockerConversionStatus() ([]*so.BitLockerConversionStatus, error) {
 	ole.CoInitialize(0)
@@ -158,6 +206,27 @@ func getBitLockerRecoveryInfoInternal(where string) ([]*so.BitLockerDeviceInfo, 
 	return retBitLocker, nil
 }
 
+func getKeyProtectors(item *ole.IDispatch) ([]string, error) {
+	kp := []string{}
+	var keyProtectorResults ole.VARIANT
+	ole.VariantInit(&keyProtectorResults)
+	keyIDResultRaw, err := oleutil.CallMethod(item, "GetKeyProtectors", 3, &keyProtectorResults)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to get Key Protectors while getting BitLocker info. %s", err.Error())
+	} else if val, ok := keyIDResultRaw.Value().(int32); val != 0 || !ok {
+		return nil, fmt.Errorf("Unable to get Key Protectors while getting BitLocker info. Return code %d", val)
+	}
+	keyProtectorValues := keyProtectorResults.ToArray().ToValueArray()
+	for _, keyIDItemRaw := range keyProtectorValues {
+		keyIDItem, ok := keyIDItemRaw.(string)
+		if !ok {
+			return nil, fmt.Errorf("KeyProtectorID wasn't a string...")
+		}
+		kp = append(kp, keyIDItem)
+	}
+	return kp, nil
+}
+
 func bitlockerConversionStatus(result *ole.IDispatch, i int) (*so.BitLockerConversionStatus, error) {
 	itemRaw, err := oleutil.CallMethod(result, "ItemIndex", i)
 	if err != nil {
@@ -252,35 +321,22 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 	if !ok {
 		return nil, fmt.Errorf("Failed to parse ConversionStatus from BitLocker info as uint32")
 	}
-
-	var keyProtectorResults ole.VARIANT
-	ole.VariantInit(&keyProtectorResults)
-	keyIDResultRaw, err := oleutil.CallMethod(item, "GetKeyProtectors", 3, &keyProtectorResults)
+	keys, err := getKeyProtectors(item)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to get Key Protectors while getting BitLocker info. %s", err.Error())
-	} else if val, ok := keyIDResultRaw.Value().(int32); val != 0 || !ok {
-		return nil, fmt.Errorf("Unable to get Key Protectors while getting BitLocker info. Return code %d", val)
+		return nil, fmt.Errorf("getKeyProtectors: %w", err)
 	}
-	keyProtectorValues := keyProtectorResults.ToArray().ToValueArray()
 
-	for _, keyIDItemRaw := range keyProtectorValues {
+	for _, k := range keys {
 		err = func() error {
-			keyIDItem, ok := keyIDItemRaw.(string)
-			if !ok {
-				return fmt.Errorf("KeyProtectorID wasn't a string...")
-			}
-
 			var recoveryKey ole.VARIANT
 			ole.VariantInit(&recoveryKey)
-			recoveryKeyResultRaw, err := oleutil.CallMethod(item, "GetKeyProtectorNumericalPassword", keyIDItem, &recoveryKey)
+			recoveryKeyResultRaw, err := oleutil.CallMethod(item, "GetKeyProtectorNumericalPassword", k, &recoveryKey)
 			if err != nil {
 				return fmt.Errorf("Unable to get Recovery Key while getting BitLocker info. %s", err.Error())
 			} else if val, ok := recoveryKeyResultRaw.Value().(int32); val != 0 || !ok {
 				return fmt.Errorf("Unable to get Recovery Key while getting BitLocker info. Return code %d", val)
 			}
-
 			retData.RecoveryKeys = append(retData.RecoveryKeys, recoveryKey.ToString())
-
 			return nil
 		}()
 		if err != nil {
