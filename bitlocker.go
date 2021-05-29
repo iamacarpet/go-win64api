@@ -259,15 +259,17 @@ func bitlockerConversionStatus(result *ole.IDispatch, i int) (*so.BitLockerConve
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get conversion status while getting BitLocker info: %w", err)
-	} else if val, ok := statusResultRaw.Value().(int32); val != 0 || !ok {
-		return nil, fmt.Errorf("unable to get conversion status while getting BitLocker info. Return code %d", val)
+	} else if val, ok := statusResultRaw.Value().(uint32); val != 0 || !ok {
+		// The possible return values of GetConversionStatus are S_OK (0x0) and FVE_E_LOCKED_VOLUME (0x80310000)
+		// If the return value is not 0, the volume is locked.
+		return nil, fmt.Errorf("unable to get conversion status while getting BitLocker info; the volume is locked. Return code %d", val)
 	}
 
-	retData.ConversionStatus = conversionStatus.Value().(int32)
-	retData.EncryptionPercentage = encryptionPercentage.Value().(int32)
-	retData.EncryptionFlags = encryptionFlags.Value().(int32)
-	retData.WipingStatus = wipingStatus.Value().(int32)
-	retData.WipingPercentage = wipingPercentage.Value().(int32)
+	retData.ConversionStatus = conversionStatus.Value().(uint32)
+	retData.EncryptionPercentage = encryptionPercentage.Value().(uint32)
+	retData.EncryptionFlags = encryptionFlags.Value().(uint32)
+	retData.WipingStatus = wipingStatus.Value().(uint32)
+	retData.WipingPercentage = wipingPercentage.Value().(uint32)
 
 	return retData, nil
 }
