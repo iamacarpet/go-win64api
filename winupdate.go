@@ -8,6 +8,7 @@ import (
 
 	ole "github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
+	"github.com/scjalliance/comshim"
 
 	so "github.com/iamacarpet/go-win64api/shared"
 )
@@ -24,8 +25,8 @@ var updateResultStatus []string = []string{
 func UpdatesPending() (*so.WindowsUpdate, error) {
 	retData := &so.WindowsUpdate{}
 
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 	unknown, err := oleutil.CreateObject("Microsoft.Update.Session")
 	if err != nil {
 		return nil, fmt.Errorf("Unable to create initial object, %s", err.Error())
