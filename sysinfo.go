@@ -12,13 +12,14 @@ import (
 
 	ole "github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
+	"github.com/scjalliance/comshim"
 
 	so "github.com/iamacarpet/go-win64api/shared"
 )
 
 func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, []so.Network, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	retHW := so.Hardware{}
 	retOS := so.OperatingSystem{}
@@ -681,13 +682,8 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
 
 		return nil
 	}()
-	if err != nil {
-		return retHW, retOS, retMEM, retDISK, retNET, err
-	}
 
-	//fmt.Printf("%#v\r\n%#v\r\n%#v\r\n%#v\r\n%#v\r\n", retHW, retOS, retMEM, retDISK, retNET)
-
-	return retHW, retOS, retMEM, retDISK, retNET, nil
+	return retHW, retOS, retMEM, retDISK, retNET, err
 }
 
 var memoryType = map[int]string{

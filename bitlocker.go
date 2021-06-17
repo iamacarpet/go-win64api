@@ -8,6 +8,7 @@ import (
 	ole "github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 	so "github.com/iamacarpet/go-win64api/shared"
+	"github.com/scjalliance/comshim"
 )
 
 // BackupBitLockerRecoveryKeys backups up volume recovery information to Active Directory.
@@ -15,8 +16,8 @@ import (
 //
 // Ref: https://docs.microsoft.com/en-us/windows/win32/secprov/backuprecoveryinformationtoactivedirectory-win32-encryptablevolume
 func BackupBitLockerRecoveryKeys(persistentVolumeIDs []string) error {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	w := &wmi{}
 	if err := w.Connect(); err != nil {
@@ -60,16 +61,16 @@ func BackupBitLockerRecoveryKeys(persistentVolumeIDs []string) error {
 
 // GetBitLockerConversionStatus returns the Bitlocker conversion status for all local drives.
 func GetBitLockerConversionStatus() ([]*so.BitLockerConversionStatus, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	return getBitLockerConversionStatusInternal("")
 }
 
 // GetBitLockerConversionStatusForDrive returns the Bitlocker conversion status for a specific drive.
 func GetBitLockerConversionStatusForDrive(driveLetter string) (*so.BitLockerConversionStatus, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	result, err := getBitLockerConversionStatusInternal(" WHERE DriveLetter = '" + driveLetter + "'")
 	if err != nil {
@@ -87,16 +88,16 @@ func GetBitLockerConversionStatusForDrive(driveLetter string) (*so.BitLockerConv
 
 // GetBitLockerRecoveryInfo returns the Bitlocker device info for all local drives.
 func GetBitLockerRecoveryInfo() ([]*so.BitLockerDeviceInfo, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	return getBitLockerRecoveryInfoInternal("")
 }
 
 // GetBitLockerRecoveryInfoForDrive returns the Bitlocker device info for a specific drive.
 func GetBitLockerRecoveryInfoForDrive(driveLetter string) (*so.BitLockerDeviceInfo, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	result, err := getBitLockerRecoveryInfoInternal(" WHERE DriveLetter = '" + driveLetter + "'")
 	if err != nil {
