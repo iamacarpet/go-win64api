@@ -38,7 +38,7 @@ func UpdatesPending() (*so.WindowsUpdate, error) {
 	for _, u := range reqUpdates {
 		retData.UpdateHistory = append(retData.UpdateHistory, &so.WindowsUpdateHistory{
 			EventDate:  time.Now(),
-			Status:     "Pending",
+			Status:     "In Progress",
 			UpdateName: u,
 		})
 	}
