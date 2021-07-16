@@ -4,6 +4,7 @@ package winapi
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/google/cabbie/search"
 	"github.com/google/cabbie/session"
