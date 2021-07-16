@@ -14,7 +14,7 @@ import (
 )
 
 var updateResultStatus []string = []string{
-	"Pending",
+	"Completed", // Was "Pending", swap to "Completed" to match Update UI in OS
 	"Completed", // Was "In Progress", swap to "Completed" to match Update UI in OS
 	"Completed",
 	"Completed With Errors",
