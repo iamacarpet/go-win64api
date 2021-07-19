@@ -29,7 +29,7 @@ func UpdatesPending() (*so.WindowsUpdate, error) {
 	comshim.Add(1)
 	defer comshim.Done()
 
-	reqUpdates, _, err := listUpdates(false)
+  reqUpdates, _, err := listUpdates(false)
 	if err != nil {
 		return nil, fmt.Errorf("Error getting Windows Update info: %s", err.Error())
 	}
