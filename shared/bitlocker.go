@@ -39,7 +39,7 @@ type BitLockerDeviceInfo struct {
 	DeviceID           string
 	PersistentVolumeID string
 	DriveLetter        string
-	ProtectionStatus   int32
-	ConversionStatus   int32
+	ProtectionStatus   uint32
+	ConversionStatus   uint32
 	RecoveryKeys       []string
 }
