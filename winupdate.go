@@ -6,16 +6,17 @@ import (
 	"fmt"
 	"time"
 
-	ole "github.com/go-ole/go-ole"
-	"github.com/go-ole/go-ole/oleutil"
+	"github.com/google/cabbie/search"
+	"github.com/google/cabbie/session"
+	"github.com/google/cabbie/updatehistory"
 	"github.com/scjalliance/comshim"
 
 	so "github.com/iamacarpet/go-win64api/shared"
 )
 
 var updateResultStatus []string = []string{
-	"Pending",
-	"In Progress",
+	"Completed", // Was "Pending", swap to "Completed" to match Update UI in OS
+	"Completed", // Was "In Progress", swap to "Completed" to match Update UI in OS
 	"Completed",
 	"Completed With Errors",
 	"Failed",
@@ -27,99 +28,32 @@ func UpdatesPending() (*so.WindowsUpdate, error) {
 
 	comshim.Add(1)
 	defer comshim.Done()
-	unknown, err := oleutil.CreateObject("Microsoft.Update.Session")
+
+  reqUpdates, _, err := listUpdates(false)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to create initial object, %s", err.Error())
+		return nil, fmt.Errorf("Error getting Windows Update info: %s", err.Error())
 	}
-	defer unknown.Release()
-	update, err := unknown.QueryInterface(ole.IID_IDispatch)
+	retData.NumUpdates = len(reqUpdates)
+
+	for _, u := range reqUpdates {
+		retData.UpdateHistory = append(retData.UpdateHistory, &so.WindowsUpdateHistory{
+			EventDate:  time.Now(),
+			Status:     "In Progress",
+			UpdateName: u,
+		})
+	}
+
+	history, err := updateHistory()
 	if err != nil {
-		return nil, fmt.Errorf("Unable to create query interface, %s", err.Error())
+		return nil, fmt.Errorf("Error getting update history: %s", err.Error())
 	}
-	defer update.Release()
-	oleutil.PutProperty(update, "ClientApplicationID", "GoLang Windows API")
 
-	us, err := oleutil.CallMethod(update, "CreateUpdateSearcher")
-	if err != nil {
-		return nil, fmt.Errorf("Error creating update searcher, %s", err.Error())
-	}
-	usd := us.ToIDispatch()
-	defer usd.Release()
-
-	usr, err := oleutil.CallMethod(usd, "Search", "IsInstalled=0 and Type='Software' and IsHidden=0")
-	if err != nil {
-		return nil, fmt.Errorf("Error performing update search, %s", err.Error())
-	}
-	usrd := usr.ToIDispatch()
-	defer usrd.Release()
-
-	upd, err := oleutil.GetProperty(usrd, "Updates")
-	if err != nil {
-		return nil, fmt.Errorf("Error getting Updates collection, %s", err.Error())
-	}
-	updd := upd.ToIDispatch()
-	defer updd.Release()
-
-	updn, err := oleutil.GetProperty(updd, "Count")
-	if err != nil {
-		return nil, fmt.Errorf("Error getting update count, %s", err.Error())
-	}
-	retData.NumUpdates = int(updn.Val)
-
-	thc, err := oleutil.CallMethod(usd, "GetTotalHistoryCount")
-	if err != nil {
-		return nil, fmt.Errorf("Error getting update history count, %s", err.Error())
-	}
-	thcn := int(thc.Val)
-
-	uhistRaw, err := oleutil.CallMethod(usd, "QueryHistory", 0, thcn)
-	if err != nil {
-		return nil, fmt.Errorf("Error querying update history, %s", err.Error())
-	}
-	uhist := uhistRaw.ToIDispatch()
-	defer uhist.Release()
-
-	countUhist, err := oleutil.GetProperty(uhist, "Count")
-	if err != nil {
-		return nil, fmt.Errorf("Unable to get property Count while processing Windows Update history: %s", err.Error())
-	}
-	count := int(countUhist.Val)
-
-	for i := 0; i < count; i++ {
-		err = func() error {
-			itemRaw, err := oleutil.GetProperty(uhist, "Item", i)
-			if err != nil {
-				return fmt.Errorf("Failed to fetch result row while processing Windows Update history. %s", err.Error())
-			}
-			item := itemRaw.ToIDispatch()
-			defer item.Release()
-
-			updateName, err := oleutil.GetProperty(item, "Title")
-			if err != nil {
-				return fmt.Errorf("Error while getting property Title from Windows Update history. %s", err.Error())
-			}
-
-			updateDate, err := oleutil.GetProperty(item, "Date")
-			if err != nil {
-				return fmt.Errorf("Error while getting property Title from Windows Update history. %s", err.Error())
-			}
-
-			resultCode, err := oleutil.GetProperty(item, "ResultCode")
-			if err != nil {
-				return fmt.Errorf("Error while getting property Title from Windows Update history. %s", err.Error())
-			}
-
-			retData.UpdateHistory = append(retData.UpdateHistory, &so.WindowsUpdateHistory{
-				EventDate:  updateDate.Value().(time.Time),
-				Status:     updateResultStatus[int(resultCode.Val)],
-				UpdateName: updateName.Value().(string),
-			})
-
-			return nil
-		}()
-		if err != nil {
-			return nil, fmt.Errorf("Unable to process update history entry: %d. %s", i, err)
-		}
+	for _, e := range history.Entries {
+		retData.UpdateHistory = append(retData.UpdateHistory, &so.WindowsUpdateHistory{
+			EventDate:  e.Date,
+			Status:     updateResultStatus[int(e.ResultCode)],
+			UpdateName: e.Title,
+		})
 	}
 
 	if retData.NumUpdates > 0 {
@@ -127,4 +61,65 @@ func UpdatesPending() (*so.WindowsUpdate, error) {
 	}
 
 	return retData, nil
+}
+
+func listUpdates(hidden bool) ([]string, []string, error) {
+	// Set search criteria
+	c := search.BasicSearch + " OR Type='Driver' OR " + search.BasicSearch + " AND Type='Software'"
+	if hidden {
+		c += " and IsHidden=1"
+	} else {
+		c += " and IsHidden=0"
+	}
+
+	// Start Windows update session
+	s, err := session.New()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create new Windows Update session: %v", err)
+	}
+	defer s.Close()
+
+	q, err := search.NewSearcher(s, c, []string{}, 1)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create a new searcher object: %v", err)
+	}
+	defer q.Close()
+
+	uc, err := q.QueryUpdates()
+	if err != nil {
+		return nil, nil, fmt.Errorf("error encountered when attempting to query for updates: %v", err)
+	}
+	defer uc.Close()
+
+	var reqUpdates, optUpdates []string
+	for _, u := range uc.Updates {
+		// Add to optional updates list if the update does not match the required categories.
+		if !u.InCategories([]string{"Critical Updates", "Definition Updates", "Security Updates"}) {
+			optUpdates = append(optUpdates, u.Title)
+			continue
+		}
+		// Skip virus updates as they always exist.
+		if !u.InCategories([]string{"Definition Updates"}) {
+			reqUpdates = append(reqUpdates, u.Title)
+		}
+	}
+	return reqUpdates, optUpdates, nil
+}
+
+func updateHistory() (*updatehistory.History, error) {
+	// Start Windows update session
+	s, err := session.New()
+	if err != nil {
+		return nil, err
+	}
+	defer s.Close()
+
+	// Create Update searcher interface
+	searcher, err := search.NewSearcher(s, "", []string{}, 1)
+	if err != nil {
+		return nil, err
+	}
+	defer searcher.Close()
+
+	return updatehistory.Get(searcher)
 }
