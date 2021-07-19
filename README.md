@@ -219,5 +219,6 @@ added, err := wapi.FirewallRuleCreate(
 	"%systemDrive%\\path\\to\\my.exe",
 	"port number as string",
 	wapi.NET_FW_IP_PROTOCOL_TCP,
+        wapi.NET_FW_ACTION_ALLOW,
 )
 ```
