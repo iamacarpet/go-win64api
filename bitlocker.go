@@ -312,7 +312,11 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 	var ok bool
 	retData.ProtectionStatus, ok = resProtectionStatus.Value().(uint32)
 	if !ok {
-		return nil, fmt.Errorf("Failed to parse ProtectionStatus from BitLocker info as uint32")
+		protectionStatus, ok := resProtectionStatus.Value().(int32)
+		if !ok {
+			return nil, fmt.Errorf("Failed to parse ProtectionStatus from BitLocker info as uint32 or int32")
+		}
+		retData.ProtectionStatus = uint32(protectionStatus)
 	}
 
 	resConversionStatus, err := oleutil.GetProperty(item, "ConversionStatus")
@@ -322,7 +326,11 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 	ok = false
 	retData.ConversionStatus, ok = resConversionStatus.Value().(uint32)
 	if !ok {
-		return nil, fmt.Errorf("Failed to parse ConversionStatus from BitLocker info as uint32")
+		conversionStatus, ok := resConversionStatus.Value().(int32)
+		if !ok {
+			return nil, fmt.Errorf("Failed to parse ConversionStatus from BitLocker info as uint32 or int32")
+		}
+		retData.ConversionStatus = uint32(conversionStatus)
 	}
 	keys, err := getKeyProtectors(item)
 	if err != nil {
