@@ -118,6 +118,12 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
 		return retHW, retOS, retMEM, retDISK, retNET, err
 	}
 
+	// Query 1.5 - TPM information.
+	retHW.TPMSpecVersion, err = sysinfo_tpm_specversion()
+	if err != nil {
+		return retHW, retOS, retMEM, retDISK, retNET, err
+	}
+
 	// Query 2 - Computer System information.
 	err = func() error {
 		resultRaw, err := oleutil.CallMethod(service, "ExecQuery", "SELECT AutomaticManagedPagefile, Manufacturer, Model, TotalPhysicalMemory FROM Win32_ComputerSystem")
