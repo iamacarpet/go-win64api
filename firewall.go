@@ -1,9 +1,11 @@
+//go:build windows && amd64
 // +build windows,amd64
 
 package winapi
 
 import (
 	"fmt"
+	"log"
 	"runtime"
 
 	ole "github.com/go-ole/go-ole"
@@ -241,7 +243,7 @@ func FirewallRuleGet(name string) (FWRule, error) {
 	if err != nil {
 		return rule, err
 	}
-	defer firewallRulesEnumRealease(ur, ep)
+	defer firewallRulesEnumRelease(ur, ep, enum)
 
 	for itemRaw, length, err := enum.Next(1); length > 0; itemRaw, length, err = enum.Next(1) {
 		if err != nil {
@@ -268,7 +270,7 @@ func FirewallRuleGet(name string) (FWRule, error) {
 
 // FirewallRulesGet returns all rules defined in firewall.
 func FirewallRulesGet() ([]FWRule, error) {
-	rules := make([]FWRule, 1000)
+	rules := make([]FWRule, 0, 1024)
 
 	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
@@ -280,7 +282,7 @@ func FirewallRulesGet() ([]FWRule, error) {
 	if err != nil {
 		return rules, err
 	}
-	defer firewallRulesEnumRealease(ur, ep)
+	defer firewallRulesEnumRelease(ur, ep, enum)
 
 	for itemRaw, length, err := enum.Next(1); length > 0; itemRaw, length, err = enum.Next(1) {
 		if err != nil {
@@ -312,93 +314,107 @@ func firewallRuleParams(itemRaw ole.VARIANT) (FWRule, error) {
 	item := itemRaw.ToIDispatch()
 	defer item.Release()
 
-	name, err := oleutil.GetProperty(item, "Name")
+	var err error
+	rule.Name, err = getStringProperty(item, "Name")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Name) of Rule")
 	}
-	rule.Name = name.ToString()
-	description, err := oleutil.GetProperty(item, "Description")
+	rule.Description, err = getStringProperty(item, "Description")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Description) of Rule %q", rule.Name)
 	}
-	rule.Description = description.ToString()
-	applicationApplicationName, err := oleutil.GetProperty(item, "ApplicationName")
+	rule.ApplicationName, err = getStringProperty(item, "ApplicationName")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (ApplicationName) of Rule %q", rule.Name)
 	}
-	rule.ApplicationName = applicationApplicationName.ToString()
-	serviceName, err := oleutil.GetProperty(item, "ServiceName")
+	rule.ServiceName, err = getStringProperty(item, "ServiceName")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (ServiceName) of Rule %q", rule.Name)
 	}
-	rule.ServiceName = serviceName.ToString()
-	localPorts, err := oleutil.GetProperty(item, "LocalPorts")
+	rule.LocalPorts, err = getStringProperty(item, "LocalPorts")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (LocalPorts) of Rule %q", rule.Name)
 	}
-	rule.LocalPorts = localPorts.ToString()
-	remotePorts, err := oleutil.GetProperty(item, "RemotePorts")
+
+	rule.RemotePorts, err = getStringProperty(item, "RemotePorts")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (RemotePorts) of Rule %q", rule.Name)
 	}
-	rule.RemotePorts = remotePorts.ToString()
-	localAddresses, err := oleutil.GetProperty(item, "LocalAddresses")
+	rule.LocalAddresses, err = getStringProperty(item, "LocalAddresses")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (LocalAddresses) of Rule %q", rule.Name)
 	}
-	rule.LocalAddresses = localAddresses.ToString()
-	remoteAddresses, err := oleutil.GetProperty(item, "RemoteAddresses")
+	rule.RemoteAddresses, err = getStringProperty(item, "RemoteAddresses")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (RemoteAddresses) of Rule %q", rule.Name)
 	}
-	rule.RemoteAddresses = remoteAddresses.ToString()
-	icmpTypesAndCodes, err := oleutil.GetProperty(item, "ICMPTypesAndCodes")
+	rule.ICMPTypesAndCodes, err = getStringProperty(item, "ICMPTypesAndCodes")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (ICMPTypesAndCodes) of Rule %q", rule.Name)
 	}
-	rule.ICMPTypesAndCodes = icmpTypesAndCodes.ToString()
-	grouping, err := oleutil.GetProperty(item, "Grouping")
+	rule.Grouping, err = getStringProperty(item, "Grouping")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Grouping) of Rule %q", rule.Name)
 	}
-	rule.Grouping = grouping.ToString()
-	interfaceTypes, err := oleutil.GetProperty(item, "InterfaceTypes")
+	rule.InterfaceTypes, err = getStringProperty(item, "InterfaceTypes")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (InterfaceTypes) of Rule %q", rule.Name)
 	}
-	rule.InterfaceTypes = interfaceTypes.ToString()
-	protocol, err := oleutil.GetProperty(item, "Protocol")
+	rule.Protocol, err = getInt32Property(item, "Protocol")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Protocol) of Rule %q", rule.Name)
 	}
-	rule.Protocol = protocol.Value().(int32)
-	direction, err := oleutil.GetProperty(item, "Direction")
+	rule.Direction, err = getInt32Property(item, "Direction")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Direction) of Rule %q", rule.Name)
 	}
-	rule.Direction = direction.Value().(int32)
-	action, err := oleutil.GetProperty(item, "Action")
+	rule.Action, err = getInt32Property(item, "Action")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Action) of Rule %q", rule.Name)
 	}
-	rule.Action = action.Value().(int32)
-	enabled, err := oleutil.GetProperty(item, "Enabled")
+	rule.Enabled, err = getBoolProperty(item, "Enabled")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Enabled) of Rule %q", rule.Name)
 	}
-	rule.Enabled = enabled.Value().(bool)
-	edgeTraversal, err := oleutil.GetProperty(item, "EdgeTraversal")
+	rule.EdgeTraversal, err = getBoolProperty(item, "EdgeTraversal")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (EdgeTraversal) of Rule %q", rule.Name)
 	}
-	rule.EdgeTraversal = edgeTraversal.Value().(bool)
-	profiles, err := oleutil.GetProperty(item, "Profiles")
+	rule.Profiles, err = getInt32Property(item, "Profiles")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Profiles) of Rule %q", rule.Name)
 	}
-	rule.Profiles = profiles.Value().(int32)
 
 	return rule, nil
+}
+func getInt32Property(dispatch *ole.IDispatch, property string) (int32, error) {
+	val, err := oleutil.GetProperty(dispatch, property)
+	if err != nil {
+		log.Printf("failed to get dispatch property: %s \n", err.Error())
+		return 0, err
+	}
+	defer val.Clear()
+	return val.Value().(int32), nil
+}
+
+func getStringProperty(dispatch *ole.IDispatch, property string) (string, error) {
+	val, err := oleutil.GetProperty(dispatch, property)
+	if err != nil {
+		log.Printf("failed to get dispatch property: %s \n", err.Error())
+		return "", err
+	}
+	defer val.Clear()
+	return val.ToString(), nil
+}
+
+func getBoolProperty(dispatch *ole.IDispatch, property string) (bool, error) {
+	val, err := oleutil.GetProperty(dispatch, property)
+	if err != nil {
+		log.Printf("failed to get dispatch property: %s \n", err.Error())
+		return false, err
+	}
+	defer val.Clear()
+	return val.Value().(bool), nil
 }
 
 // FirewallGroupEnable allows to enable predefined firewall group. It is better
@@ -729,7 +745,7 @@ func FirewallRuleExistsByName(rules *ole.IDispatch, name string) (bool, error) {
 
 // firewallRulesEnum takes fwPolicy object and returns all objects which needs freeing and enum itself,
 // which is used to enumerate rules. do not forget to:
-//   defer firewallRulesEnumRealease(ur, ep)
+//   defer firewallRulesEnumRelease(ur, ep)
 func firewallRulesEnum(fwPolicy *ole.IDispatch) (*ole.VARIANT, *ole.VARIANT, *ole.IEnumVARIANT, error) {
 	unknownRules, err := oleutil.GetProperty(fwPolicy, "Rules")
 	if err != nil {
@@ -758,9 +774,10 @@ func firewallRulesEnum(fwPolicy *ole.IDispatch) (*ole.VARIANT, *ole.VARIANT, *ol
 }
 
 // firewallRuleEnumRelease will free memory used by firewallRulesEnum.
-func firewallRulesEnumRealease(unknownRules, enumProperty *ole.VARIANT) {
+func firewallRulesEnumRelease(unknownRules, enumProperty *ole.VARIANT, enum *ole.IEnumVARIANT) {
 	enumProperty.Clear()
 	unknownRules.Clear()
+	enum.Release()
 }
 
 // firewallAPIInit initialize common fw api.
