@@ -536,6 +536,64 @@ func FirewallDisable(profile int32) (bool, error) {
 	return true, nil
 }
 
+// FirewallGetDefaultOutboundAction checks if outgoing connections without matching rules are allowed or blocked.
+// Returns either NET_FW_ACTION_ALLOW or NET_FW_ACTION_BLOCK.
+func FirewallGetDefaultOutboundAction(profile int32) (int32, error) {
+	u, fwPolicy, err := firewallAPIInit()
+	if err != nil {
+		return 0, err
+	}
+	defer firewallAPIRelease(u, fwPolicy)
+
+	action, err := oleutil.GetProperty(fwPolicy, "DefaultOutboundAction", profile)
+	if err != nil {
+		return 0, err
+	}
+	return action.Value().(int32), nil
+}
+
+// FirewallGetDefaultInboundAction checks if incoming connections without matching rules are allowed or blocked.
+// Returns either NET_FW_ACTION_ALLOW or NET_FW_ACTION_BLOCK.
+func FirewallGetDefaultInboundAction(profile int32) (int32, error) {
+	u, fwPolicy, err := firewallAPIInit()
+	if err != nil {
+		return 0, err
+	}
+	defer firewallAPIRelease(u, fwPolicy)
+
+	action, err := oleutil.GetProperty(fwPolicy, "DefaultInboundAction", profile)
+	if err != nil {
+		return 0, err
+	}
+	return action.Value().(int32), nil
+}
+
+// FirewallSetDefaultOutboundAction sets the default policy for outgoing connections.
+// action must be NET_FW_ACTION_ALLOW or NET_FW_ACTION_BLOCK.
+func FirewallSetDefaultOutboundAction(profile, action int32) error {
+	u, fwPolicy, err := firewallAPIInit()
+	if err != nil {
+		return err
+	}
+	defer firewallAPIRelease(u, fwPolicy)
+
+	_, err = oleutil.PutProperty(fwPolicy, "DefaultOutboundAction", profile, action)
+	return err
+}
+
+// FirewallSetDefaultInboundAction sets the default policy for incoming connections.
+//// action must be NET_FW_ACTION_ALLOW or NET_FW_ACTION_BLOCK.
+func FirewallSetDefaultInboundAction(profile, action int32) error {
+	u, fwPolicy, err := firewallAPIInit()
+	if err != nil {
+		return err
+	}
+	defer firewallAPIRelease(u, fwPolicy)
+
+	_, err = oleutil.PutProperty(fwPolicy, "DefaultInboundAction", profile, action)
+	return err
+}
+
 // FirewallCurrentProfiles return which profiles are currently active.
 // Every active interface can have it's own profile. F.e.: Public for Wifi,
 // Domain for VPN, and Private for LAN. All at the same time.
