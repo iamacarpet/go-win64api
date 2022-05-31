@@ -8,6 +8,7 @@ import (
 	ole "github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 	so "github.com/iamacarpet/go-win64api/shared"
+	"github.com/scjalliance/comshim"
 )
 
 // BackupBitLockerRecoveryKeys backups up volume recovery information to Active Directory.
@@ -15,8 +16,8 @@ import (
 //
 // Ref: https://docs.microsoft.com/en-us/windows/win32/secprov/backuprecoveryinformationtoactivedirectory-win32-encryptablevolume
 func BackupBitLockerRecoveryKeys(persistentVolumeIDs []string) error {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	w := &wmi{}
 	if err := w.Connect(); err != nil {
@@ -60,16 +61,16 @@ func BackupBitLockerRecoveryKeys(persistentVolumeIDs []string) error {
 
 // GetBitLockerConversionStatus returns the Bitlocker conversion status for all local drives.
 func GetBitLockerConversionStatus() ([]*so.BitLockerConversionStatus, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	return getBitLockerConversionStatusInternal("")
 }
 
 // GetBitLockerConversionStatusForDrive returns the Bitlocker conversion status for a specific drive.
 func GetBitLockerConversionStatusForDrive(driveLetter string) (*so.BitLockerConversionStatus, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	result, err := getBitLockerConversionStatusInternal(" WHERE DriveLetter = '" + driveLetter + "'")
 	if err != nil {
@@ -87,16 +88,16 @@ func GetBitLockerConversionStatusForDrive(driveLetter string) (*so.BitLockerConv
 
 // GetBitLockerRecoveryInfo returns the Bitlocker device info for all local drives.
 func GetBitLockerRecoveryInfo() ([]*so.BitLockerDeviceInfo, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	return getBitLockerRecoveryInfoInternal("")
 }
 
 // GetBitLockerRecoveryInfoForDrive returns the Bitlocker device info for a specific drive.
 func GetBitLockerRecoveryInfoForDrive(driveLetter string) (*so.BitLockerDeviceInfo, error) {
-	ole.CoInitialize(0)
-	defer ole.CoUninitialize()
+	comshim.Add(1)
+	defer comshim.Done()
 
 	result, err := getBitLockerRecoveryInfoInternal(" WHERE DriveLetter = '" + driveLetter + "'")
 	if err != nil {
@@ -259,15 +260,17 @@ func bitlockerConversionStatus(result *ole.IDispatch, i int) (*so.BitLockerConve
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get conversion status while getting BitLocker info: %w", err)
-	} else if val, ok := statusResultRaw.Value().(int32); val != 0 || !ok {
-		return nil, fmt.Errorf("unable to get conversion status while getting BitLocker info. Return code %d", val)
+	} else if val, ok := statusResultRaw.Value().(uint32); val != 0 || !ok {
+		// The possible return values of GetConversionStatus are S_OK (0x0) and FVE_E_LOCKED_VOLUME (0x80310000)
+		// If the return value is not 0, the volume is locked.
+		return nil, fmt.Errorf("unable to get conversion status while getting BitLocker info; the volume is locked. Return code %d", val)
 	}
 
-	retData.ConversionStatus = conversionStatus.Value().(int32)
-	retData.EncryptionPercentage = encryptionPercentage.Value().(int32)
-	retData.EncryptionFlags = encryptionFlags.Value().(int32)
-	retData.WipingStatus = wipingStatus.Value().(int32)
-	retData.WipingPercentage = wipingPercentage.Value().(int32)
+	retData.ConversionStatus = conversionStatus.Value().(uint32)
+	retData.EncryptionPercentage = encryptionPercentage.Value().(uint32)
+	retData.EncryptionFlags = encryptionFlags.Value().(uint32)
+	retData.WipingStatus = wipingStatus.Value().(uint32)
+	retData.WipingPercentage = wipingPercentage.Value().(uint32)
 
 	return retData, nil
 }
@@ -307,9 +310,13 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 		return nil, fmt.Errorf("Error while getting property ProtectionStatus from BitLocker info. %s", err.Error())
 	}
 	var ok bool
-	retData.ProtectionStatus, ok = resProtectionStatus.Value().(int32)
+	retData.ProtectionStatus, ok = resProtectionStatus.Value().(uint32)
 	if !ok {
-		return nil, fmt.Errorf("Failed to parse ProtectionStatus from BitLocker info as uint32")
+		protectionStatus, ok := resProtectionStatus.Value().(int32)
+		if !ok {
+			return nil, fmt.Errorf("Failed to parse ProtectionStatus from BitLocker info as uint32 or int32")
+		}
+		retData.ProtectionStatus = uint32(protectionStatus)
 	}
 
 	resConversionStatus, err := oleutil.GetProperty(item, "ConversionStatus")
@@ -317,9 +324,13 @@ func bitlockerRecoveryInfo(result *ole.IDispatch, i int) (*so.BitLockerDeviceInf
 		return nil, fmt.Errorf("error while getting property ConversionStatus from BitLocker info: %w", err)
 	}
 	ok = false
-	retData.ConversionStatus, ok = resConversionStatus.Value().(int32)
+	retData.ConversionStatus, ok = resConversionStatus.Value().(uint32)
 	if !ok {
-		return nil, fmt.Errorf("Failed to parse ConversionStatus from BitLocker info as uint32")
+		conversionStatus, ok := resConversionStatus.Value().(int32)
+		if !ok {
+			return nil, fmt.Errorf("Failed to parse ConversionStatus from BitLocker info as uint32 or int32")
+		}
+		retData.ConversionStatus = uint32(conversionStatus)
 	}
 	keys, err := getKeyProtectors(item)
 	if err != nil {

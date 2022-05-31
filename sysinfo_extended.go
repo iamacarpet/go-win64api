@@ -112,3 +112,56 @@ func sysinfo_bitlocker_check(driveName string) (bool, bool, error) {
 		return false, false, nil
 	}
 }
+
+func sysinfo_tpm_specversion() (string, error) {
+	unknown, err := oleutil.CreateObject("WbemScripting.SWbemLocator")
+	if err != nil {
+		return "", fmt.Errorf("Unable to create initial object, %s", err.Error())
+	}
+	defer unknown.Release()
+	wmi, err := unknown.QueryInterface(ole.IID_IDispatch)
+	if err != nil {
+		return "", fmt.Errorf("Unable to create initial object, %s", err.Error())
+	}
+	defer wmi.Release()
+	serviceRaw, err := oleutil.CallMethod(wmi, "ConnectServer", nil, `\\.\ROOT\CIMV2\Security\MicrosoftTpm`)
+	if err != nil {
+		return "", fmt.Errorf("Permission Denied - %s", err)
+	}
+	service := serviceRaw.ToIDispatch()
+	defer service.Release()
+
+	resultRaw, err := oleutil.CallMethod(service, "ExecQuery", "SELECT SpecVersion FROM Win32_Tpm")
+	if err != nil {
+		return "", fmt.Errorf("Unable to execute query while getting TPM info. %s", err.Error())
+	}
+	result := resultRaw.ToIDispatch()
+	defer result.Release()
+
+	countVar, err := oleutil.GetProperty(result, "Count")
+	if err != nil {
+		return "", fmt.Errorf("Unable to get property Count while processing TPM info. %s", err.Error())
+	}
+	count := int(countVar.Val)
+
+	if count > 0 {
+		itemRaw, err := oleutil.CallMethod(result, "ItemIndex", 0)
+		if err != nil {
+			return "", fmt.Errorf("Failed to fetch result row while processing TPM info. %s", err.Error())
+		}
+		item := itemRaw.ToIDispatch()
+		defer item.Release()
+
+		resVersion, err := oleutil.GetProperty(item, "SpecVersion")
+		if err != nil {
+			return "", fmt.Errorf("Error while getting property SpecVersion in TPM info. %s", err.Error())
+		}
+		if version, ok := resVersion.Value().(string); ok {
+			return version, nil
+		} else {
+			return "", fmt.Errorf("Unable to convert SpecVersion to string in TPM info")
+		}
+	} else {
+		return "Not Installed", nil
+	}
+}

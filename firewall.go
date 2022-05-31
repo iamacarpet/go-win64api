@@ -4,10 +4,12 @@ package winapi
 
 import (
 	"fmt"
+	"log"
 	"runtime"
 
 	ole "github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
+	"github.com/scjalliance/comshim"
 )
 
 // Firewall related API constants.
@@ -107,7 +109,7 @@ func FirewallRuleAdd(name, description, group, ports string, protocol, profile i
 	if ports == "" {
 		return false, fmt.Errorf("empty FW Rule ports, it is mandatory")
 	}
-	return firewallRuleAdd(name, description, group, "", "", ports, "", "", "", "", protocol, 0, profile, true, false)
+	return firewallRuleAdd(name, description, group, "", "", ports, "", "", "", "", protocol, 0, NET_FW_ACTION_ALLOW, profile, true, false)
 }
 
 // FirewallRuleAddApplication creates Inbound rule for given application.
@@ -132,12 +134,12 @@ func FirewallRuleAddApplication(name, description, group, appPath string, profil
 	if appPath == "" {
 		return false, fmt.Errorf("empty FW Rule appPath, it is mandatory")
 	}
-	return firewallRuleAdd(name, description, group, appPath, "", "", "", "", "", "", 0, 0, profile, true, false)
+	return firewallRuleAdd(name, description, group, appPath, "", "", "", "", "", "", 0, 0, NET_FW_ACTION_ALLOW, profile, true, false)
 }
 
 // FirewallRuleCreate is deprecated, use FirewallRuleAddApplication instead.
 func FirewallRuleCreate(name, description, group, appPath, port string, protocol int32) (bool, error) {
-	return firewallRuleAdd(name, description, group, appPath, "", port, "", "", "", "", protocol, 0, NET_FW_PROFILE2_CURRENT, true, false)
+	return firewallRuleAdd(name, description, group, appPath, "", port, "", "", "", "", protocol, 0, NET_FW_ACTION_ALLOW, NET_FW_PROFILE2_CURRENT, true, false)
 }
 
 // FirewallPingEnable creates Inbound ICMPv4 rule which allows to answer echo requests.
@@ -156,7 +158,7 @@ func FirewallRuleCreate(name, description, group, appPath, port string, protocol
 //   NET_FW_PROFILE2_ALL // adds rule to all profiles
 //   NET_FW_PROFILE2_DOMAIN|NET_FW_PROFILE2_PRIVATE // rule in Private and Domain profile
 func FirewallPingEnable(name, description, group, remoteAddresses string, profile int32) (bool, error) {
-	return firewallRuleAdd(name, description, group, "", "", "", "", "", remoteAddresses, "8:*", NET_FW_IP_PROTOCOL_ICMPv4, 0, profile, true, false)
+	return firewallRuleAdd(name, description, group, "", "", "", "", "", remoteAddresses, "8:*", NET_FW_IP_PROTOCOL_ICMPv4, 0, NET_FW_ACTION_ALLOW, profile, true, false)
 }
 
 // FirewallRuleAddAdvanced allows to modify almost all available FW Rule parameters.
@@ -167,7 +169,7 @@ func FirewallPingEnable(name, description, group, remoteAddresses string, profil
 func FirewallRuleAddAdvanced(rule FWRule) (bool, error) {
 	return firewallRuleAdd(rule.Name, rule.Description, rule.Grouping, rule.ApplicationName, rule.ServiceName,
 		rule.LocalPorts, rule.RemotePorts, rule.LocalAddresses, rule.RemoteAddresses, rule.ICMPTypesAndCodes,
-		rule.Protocol, rule.Direction, rule.Profiles, rule.Enabled, rule.EdgeTraversal)
+		rule.Protocol, rule.Direction, rule.Action, rule.Profiles, rule.Enabled, rule.EdgeTraversal)
 }
 
 // FirewallRuleDelete allows you to delete existing rule by name.
@@ -240,7 +242,7 @@ func FirewallRuleGet(name string) (FWRule, error) {
 	if err != nil {
 		return rule, err
 	}
-	defer firewallRulesEnumRealease(ur, ep)
+	defer firewallRulesEnumRelease(ur, ep, enum)
 
 	for itemRaw, length, err := enum.Next(1); length > 0; itemRaw, length, err = enum.Next(1) {
 		if err != nil {
@@ -267,7 +269,7 @@ func FirewallRuleGet(name string) (FWRule, error) {
 
 // FirewallRulesGet returns all rules defined in firewall.
 func FirewallRulesGet() ([]FWRule, error) {
-	rules := make([]FWRule, 1000)
+	rules := make([]FWRule, 0, 1024)
 
 	u, fwPolicy, err := firewallAPIInit()
 	if err != nil {
@@ -279,7 +281,7 @@ func FirewallRulesGet() ([]FWRule, error) {
 	if err != nil {
 		return rules, err
 	}
-	defer firewallRulesEnumRealease(ur, ep)
+	defer firewallRulesEnumRelease(ur, ep, enum)
 
 	for itemRaw, length, err := enum.Next(1); length > 0; itemRaw, length, err = enum.Next(1) {
 		if err != nil {
@@ -311,93 +313,107 @@ func firewallRuleParams(itemRaw ole.VARIANT) (FWRule, error) {
 	item := itemRaw.ToIDispatch()
 	defer item.Release()
 
-	name, err := oleutil.GetProperty(item, "Name")
+	var err error
+	rule.Name, err = getStringProperty(item, "Name")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Name) of Rule")
 	}
-	rule.Name = name.ToString()
-	description, err := oleutil.GetProperty(item, "Description")
+	rule.Description, err = getStringProperty(item, "Description")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Description) of Rule %q", rule.Name)
 	}
-	rule.Description = description.ToString()
-	applicationApplicationName, err := oleutil.GetProperty(item, "ApplicationName")
+	rule.ApplicationName, err = getStringProperty(item, "ApplicationName")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (ApplicationName) of Rule %q", rule.Name)
 	}
-	rule.ApplicationName = applicationApplicationName.ToString()
-	serviceName, err := oleutil.GetProperty(item, "ServiceName")
+	rule.ServiceName, err = getStringProperty(item, "ServiceName")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (ServiceName) of Rule %q", rule.Name)
 	}
-	rule.ServiceName = serviceName.ToString()
-	localPorts, err := oleutil.GetProperty(item, "LocalPorts")
+	rule.LocalPorts, err = getStringProperty(item, "LocalPorts")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (LocalPorts) of Rule %q", rule.Name)
 	}
-	rule.LocalPorts = localPorts.ToString()
-	remotePorts, err := oleutil.GetProperty(item, "RemotePorts")
+
+	rule.RemotePorts, err = getStringProperty(item, "RemotePorts")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (RemotePorts) of Rule %q", rule.Name)
 	}
-	rule.RemotePorts = remotePorts.ToString()
-	localAddresses, err := oleutil.GetProperty(item, "LocalAddresses")
+	rule.LocalAddresses, err = getStringProperty(item, "LocalAddresses")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (LocalAddresses) of Rule %q", rule.Name)
 	}
-	rule.LocalAddresses = localAddresses.ToString()
-	remoteAddresses, err := oleutil.GetProperty(item, "RemoteAddresses")
+	rule.RemoteAddresses, err = getStringProperty(item, "RemoteAddresses")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (RemoteAddresses) of Rule %q", rule.Name)
 	}
-	rule.RemoteAddresses = remoteAddresses.ToString()
-	icmpTypesAndCodes, err := oleutil.GetProperty(item, "ICMPTypesAndCodes")
+	rule.ICMPTypesAndCodes, err = getStringProperty(item, "ICMPTypesAndCodes")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (ICMPTypesAndCodes) of Rule %q", rule.Name)
 	}
-	rule.ICMPTypesAndCodes = icmpTypesAndCodes.ToString()
-	grouping, err := oleutil.GetProperty(item, "Grouping")
+	rule.Grouping, err = getStringProperty(item, "Grouping")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Grouping) of Rule %q", rule.Name)
 	}
-	rule.Grouping = grouping.ToString()
-	interfaceTypes, err := oleutil.GetProperty(item, "InterfaceTypes")
+	rule.InterfaceTypes, err = getStringProperty(item, "InterfaceTypes")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (InterfaceTypes) of Rule %q", rule.Name)
 	}
-	rule.InterfaceTypes = interfaceTypes.ToString()
-	protocol, err := oleutil.GetProperty(item, "Protocol")
+	rule.Protocol, err = getInt32Property(item, "Protocol")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Protocol) of Rule %q", rule.Name)
 	}
-	rule.Protocol = protocol.Value().(int32)
-	direction, err := oleutil.GetProperty(item, "Direction")
+	rule.Direction, err = getInt32Property(item, "Direction")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Direction) of Rule %q", rule.Name)
 	}
-	rule.Direction = direction.Value().(int32)
-	action, err := oleutil.GetProperty(item, "Action")
+	rule.Action, err = getInt32Property(item, "Action")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Action) of Rule %q", rule.Name)
 	}
-	rule.Action = action.Value().(int32)
-	enabled, err := oleutil.GetProperty(item, "Enabled")
+	rule.Enabled, err = getBoolProperty(item, "Enabled")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Enabled) of Rule %q", rule.Name)
 	}
-	rule.Enabled = enabled.Value().(bool)
-	edgeTraversal, err := oleutil.GetProperty(item, "EdgeTraversal")
+	rule.EdgeTraversal, err = getBoolProperty(item, "EdgeTraversal")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (EdgeTraversal) of Rule %q", rule.Name)
 	}
-	rule.EdgeTraversal = edgeTraversal.Value().(bool)
-	profiles, err := oleutil.GetProperty(item, "Profiles")
+	rule.Profiles, err = getInt32Property(item, "Profiles")
 	if err != nil {
 		return rule, fmt.Errorf("failed to get Property (Profiles) of Rule %q", rule.Name)
 	}
-	rule.Profiles = profiles.Value().(int32)
 
 	return rule, nil
+}
+func getInt32Property(dispatch *ole.IDispatch, property string) (int32, error) {
+	val, err := oleutil.GetProperty(dispatch, property)
+	if err != nil {
+		log.Printf("failed to get dispatch property: %s \n", err.Error())
+		return 0, err
+	}
+	defer val.Clear()
+	return val.Value().(int32), nil
+}
+
+func getStringProperty(dispatch *ole.IDispatch, property string) (string, error) {
+	val, err := oleutil.GetProperty(dispatch, property)
+	if err != nil {
+		log.Printf("failed to get dispatch property: %s \n", err.Error())
+		return "", err
+	}
+	defer val.Clear()
+	return val.ToString(), nil
+}
+
+func getBoolProperty(dispatch *ole.IDispatch, property string) (bool, error) {
+	val, err := oleutil.GetProperty(dispatch, property)
+	if err != nil {
+		log.Printf("failed to get dispatch property: %s \n", err.Error())
+		return false, err
+	}
+	defer val.Clear()
+	return val.Value().(bool), nil
 }
 
 // FirewallGroupEnable allows to enable predefined firewall group. It is better
@@ -520,6 +536,64 @@ func FirewallDisable(profile int32) (bool, error) {
 	return true, nil
 }
 
+// FirewallGetDefaultOutboundAction checks if outgoing connections without matching rules are allowed or blocked.
+// Returns either NET_FW_ACTION_ALLOW or NET_FW_ACTION_BLOCK.
+func FirewallGetDefaultOutboundAction(profile int32) (int32, error) {
+	u, fwPolicy, err := firewallAPIInit()
+	if err != nil {
+		return 0, err
+	}
+	defer firewallAPIRelease(u, fwPolicy)
+
+	action, err := oleutil.GetProperty(fwPolicy, "DefaultOutboundAction", profile)
+	if err != nil {
+		return 0, err
+	}
+	return action.Value().(int32), nil
+}
+
+// FirewallGetDefaultInboundAction checks if incoming connections without matching rules are allowed or blocked.
+// Returns either NET_FW_ACTION_ALLOW or NET_FW_ACTION_BLOCK.
+func FirewallGetDefaultInboundAction(profile int32) (int32, error) {
+	u, fwPolicy, err := firewallAPIInit()
+	if err != nil {
+		return 0, err
+	}
+	defer firewallAPIRelease(u, fwPolicy)
+
+	action, err := oleutil.GetProperty(fwPolicy, "DefaultInboundAction", profile)
+	if err != nil {
+		return 0, err
+	}
+	return action.Value().(int32), nil
+}
+
+// FirewallSetDefaultOutboundAction sets the default policy for outgoing connections.
+// action must be NET_FW_ACTION_ALLOW or NET_FW_ACTION_BLOCK.
+func FirewallSetDefaultOutboundAction(profile, action int32) error {
+	u, fwPolicy, err := firewallAPIInit()
+	if err != nil {
+		return err
+	}
+	defer firewallAPIRelease(u, fwPolicy)
+
+	_, err = oleutil.PutProperty(fwPolicy, "DefaultOutboundAction", profile, action)
+	return err
+}
+
+// FirewallSetDefaultInboundAction sets the default policy for incoming connections.
+//// action must be NET_FW_ACTION_ALLOW or NET_FW_ACTION_BLOCK.
+func FirewallSetDefaultInboundAction(profile, action int32) error {
+	u, fwPolicy, err := firewallAPIInit()
+	if err != nil {
+		return err
+	}
+	defer firewallAPIRelease(u, fwPolicy)
+
+	_, err = oleutil.PutProperty(fwPolicy, "DefaultInboundAction", profile, action)
+	return err
+}
+
 // FirewallCurrentProfiles return which profiles are currently active.
 // Every active interface can have it's own profile. F.e.: Public for Wifi,
 // Domain for VPN, and Private for LAN. All at the same time.
@@ -561,7 +635,7 @@ func firewallParseProfiles(v int32) FWProfiles {
 }
 
 // firewallRuleAdd is universal function to add all kinds of rules.
-func firewallRuleAdd(name, description, group, appPath, serviceName, ports, remotePorts, localAddresses, remoteAddresses, icmpTypes string, protocol, direction, profile int32, enabled, edgeTraversal bool) (bool, error) {
+func firewallRuleAdd(name, description, group, appPath, serviceName, ports, remotePorts, localAddresses, remoteAddresses, icmpTypes string, protocol, direction, action, profile int32, enabled, edgeTraversal bool) (bool, error) {
 
 	if name == "" {
 		return false, fmt.Errorf("empty FW Rule name, name is mandatory")
@@ -667,7 +741,7 @@ func firewallRuleAdd(name, description, group, appPath, serviceName, ports, remo
 	if _, err := oleutil.PutProperty(fwRule, "Profiles", profile); err != nil {
 		return false, fmt.Errorf("Error setting property (Profiles) of Rule: %s", err)
 	}
-	if _, err := oleutil.PutProperty(fwRule, "Action", NET_FW_ACTION_ALLOW); err != nil {
+	if _, err := oleutil.PutProperty(fwRule, "Action", action); err != nil {
 		return false, fmt.Errorf("Error setting property (Action) of Rule: %s", err)
 	}
 	if edgeTraversal {
@@ -728,7 +802,7 @@ func FirewallRuleExistsByName(rules *ole.IDispatch, name string) (bool, error) {
 
 // firewallRulesEnum takes fwPolicy object and returns all objects which needs freeing and enum itself,
 // which is used to enumerate rules. do not forget to:
-//   defer firewallRulesEnumRealease(ur, ep)
+//   defer firewallRulesEnumRelease(ur, ep)
 func firewallRulesEnum(fwPolicy *ole.IDispatch) (*ole.VARIANT, *ole.VARIANT, *ole.IEnumVARIANT, error) {
 	unknownRules, err := oleutil.GetProperty(fwPolicy, "Rules")
 	if err != nil {
@@ -757,16 +831,17 @@ func firewallRulesEnum(fwPolicy *ole.IDispatch) (*ole.VARIANT, *ole.VARIANT, *ol
 }
 
 // firewallRuleEnumRelease will free memory used by firewallRulesEnum.
-func firewallRulesEnumRealease(unknownRules, enumProperty *ole.VARIANT) {
+func firewallRulesEnumRelease(unknownRules, enumProperty *ole.VARIANT, enum *ole.IEnumVARIANT) {
 	enumProperty.Clear()
 	unknownRules.Clear()
+	enum.Release()
 }
 
 // firewallAPIInit initialize common fw api.
 // then:
 // dispatch firewallAPIRelease(u, fwp)
 func firewallAPIInit() (*ole.IUnknown, *ole.IDispatch, error) {
-	ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED|ole.COINIT_SPEED_OVER_MEMORY)
+	comshim.Add(1)
 
 	unknown, err := oleutil.CreateObject("HNetCfg.FwPolicy2")
 	if err != nil {
@@ -787,5 +862,5 @@ func firewallAPIInit() (*ole.IUnknown, *ole.IDispatch, error) {
 func firewallAPIRelease(u *ole.IUnknown, fwp *ole.IDispatch) {
 	fwp.Release()
 	u.Release()
-	ole.CoUninitialize()
+	comshim.Done()
 }
