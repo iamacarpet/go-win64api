@@ -5,9 +5,9 @@ import "errors"
 type NetSetupProvisioningParams struct {
 	Domain               string   `json:"domain"`
 	HostName             string   `json:"hostname"`
-	MachineAccountOU     string   `json:"machine_account_ou"`
-	CertificateTemplates []string `json:"certificate_templates"`
-	GroupPolicyObjects   []string `json:"group_policy_objects"`
+	MachineAccountOU     string   `json:"machine_account_ou,omitempty"`
+	CertificateTemplates []string `json:"certificate_templates,omitempty"`
+	GroupPolicyObjects   []string `json:"group_policy_objects,omitempty"`
 }
 
 var (
