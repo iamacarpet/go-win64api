@@ -1,1 +1,4 @@
 demo
+*.exe
+/wutest
+lsyncd.*
