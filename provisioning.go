@@ -12,12 +12,12 @@ import (
 )
 
 var (
-	netapi32 = syscall.MustLoadDLL("Netapi32.dll")
+	netapi32 = syscall.NewLazyDLL("Netapi32.dll")
 
 	// Ref: https://docs.microsoft.com/en-us/windows/win32/api/lmjoin/nf-lmjoin-netcreateprovisioningpackage
-	netCreateProvisioningPackage = netapi32.MustFindProc("NetCreateProvisioningPackage")
+	netCreateProvisioningPackage = netapi32.NewProc("NetCreateProvisioningPackage")
 	// Ref: https://docs.microsoft.com/en-us/windows/win32/api/lmjoin/nf-lmjoin-netrequestprovisioningpackageinstall
-	netRequestProvisioningPackageInstall = netapi32.MustFindProc("NetRequestProvisioningPackageInstall")
+	netRequestProvisioningPackageInstall = netapi32.NewProc("NetRequestProvisioningPackageInstall")
 )
 
 const (
