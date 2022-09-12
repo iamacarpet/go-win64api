@@ -305,6 +305,7 @@ func firewallRuleName(item *ole.IDispatch) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get Property (Name) of Rule, err: %v", err)
 	}
+	name.Clear()
 	return name.ToString(), nil
 }
 
