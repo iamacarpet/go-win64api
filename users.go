@@ -10,7 +10,7 @@ import (
 	"time"
 	"unsafe"
 
-	so "github.com/iamacarpet/go-win64api/shared"
+	so "github.com/saksham-ghimire/go-win64api/shared"
 )
 
 var (
@@ -128,16 +128,16 @@ type LOCALGROUP_MEMBERS_INFO_3 struct {
 // The only required fields are Username and Password.
 //
 // Fields:
-//	- Username		account username, limited to 20 characters.
-//	- Password 		account password
-//	- FullName		user's full name (default: none)
-//  - PrivLevel		account's prvilege level, must be one of the USER_PRIV_* constants
-//					(default: USER_PRIV_GUEST)
-// 	- HomeDir		If non-empty, the user's home directory is set to the specified
-//					path.
-//	- Comment		A comment to associate with the account (default: none)
-//	- ScriptPath 	If non-empty, the path to the user's logon script file, which can
-//					be a .CMD, .EXE, or .BAT file. (default: none)
+//   - Username		account username, limited to 20 characters.
+//   - Password 		account password
+//   - FullName		user's full name (default: none)
+//   - PrivLevel		account's prvilege level, must be one of the USER_PRIV_* constants
+//     (default: USER_PRIV_GUEST)
+//   - HomeDir		If non-empty, the user's home directory is set to the specified
+//     path.
+//   - Comment		A comment to associate with the account (default: none)
+//   - ScriptPath 	If non-empty, the path to the user's logon script file, which can
+//     be a .CMD, .EXE, or .BAT file. (default: none)
 type UserAddOptions struct {
 	// Required
 	Username string

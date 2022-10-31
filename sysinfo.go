@@ -15,7 +15,7 @@ import (
 	"github.com/go-ole/go-ole/oleutil"
 	"github.com/scjalliance/comshim"
 
-	so "github.com/iamacarpet/go-win64api/shared"
+	so "github.com/saksham-ghimire/go-win64api/shared"
 )
 
 func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, []so.Network, error) {
