@@ -9,7 +9,7 @@ import (
 	"time"
 	"unsafe"
 
-	so "github.com/saksham-ghimire/go-win64api/shared"
+	so "github.com/iamacarpet/shared"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"

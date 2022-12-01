@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/saksham-ghimire/go-win64api/shared"
+	"github.com/iamacarpet/shared"
 )
 
 func (f *FWRule) ValidateFWRule() (bool, error) {

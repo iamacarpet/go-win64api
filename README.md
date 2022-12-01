@@ -6,7 +6,7 @@ Tested and developed for Windows 10 x64.
 
 All functions that return useful data, do so in the form of JSON exportable structs.
 
-These structs are available in the shared library, "github.com/saksham-ghimire/go-win64api/shared"
+These structs are available in the shared library, "github.com/iamacarpet/shared"
 
 ### Process List
 ```go
