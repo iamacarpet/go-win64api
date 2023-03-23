@@ -543,7 +543,6 @@ func userGetFlags(username string) (uint32, error) {
 
 	var data = (*USER_INFO_1)(unsafe.Pointer(dataPointer))
 
-	fmt.Printf("existing user flags: %d\r\n", data.Usri1_flags)
 	return data.Usri1_flags, nil
 }
 
