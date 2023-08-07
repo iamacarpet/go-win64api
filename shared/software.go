@@ -19,6 +19,7 @@ type Software struct {
 	UninstallString string    `json:"UninstallString"`
 	VersionMajor    uint64    `json:"VersionMajor"`
 	VersionMinor    uint64    `json:"VersionMinor"`
+	RegKey          string    `json:"RegKey"`
 }
 
 func (s *Software) Name() string {
