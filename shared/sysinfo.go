@@ -37,6 +37,7 @@ type OperatingSystem struct {
 	Architecture   string    `json:"Architecture"`
 	LanguageCode   uint16    `json:"Language"`
 	LastBootUpTime time.Time `json:"LastBootUpTime`
+	SystemDrive    string    `json:"SystemDrive"`
 }
 
 type Memory struct {
