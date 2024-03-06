@@ -226,7 +226,7 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
 
 	// Query 4 - Operating System information.
 	err = func() error {
-		resultRaw, err := oleutil.CallMethod(service, "ExecQuery", "SELECT Caption, Version, OSArchitecture, OSLanguage, TotalVisibleMemorySize, FreePhysicalMemory, TotalVirtualMemorySize, FreeVirtualMemory, LastBootUpTime FROM Win32_OperatingSystem")
+		resultRaw, err := oleutil.CallMethod(service, "ExecQuery", "SELECT Caption, Version, OSArchitecture, OSLanguage, TotalVisibleMemorySize, FreePhysicalMemory, TotalVirtualMemorySize, FreeVirtualMemory, LastBootUpTime, SystemDrive FROM Win32_OperatingSystem")
 		if err != nil {
 			return fmt.Errorf("Unable to execute query while getting Operating System info. %s", err.Error())
 		}
@@ -348,6 +348,12 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
 					return fmt.Errorf("Error asserting LastBootUpTime as string from Operating System Info. Got type %s", reflect.TypeOf(resFreePageFile.Value()).Name())
 				}
 			}
+
+			resSystemDrive, err := oleutil.GetProperty(item, "SystemDrive")
+			if err != nil {
+				return fmt.Errorf("Error while getting property SystemDrive from Operating System info. %s", err.Error())
+			}
+			retOS.SystemDrive = resSystemDrive.ToString()
 		}
 		return nil
 	}()
