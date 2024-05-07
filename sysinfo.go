@@ -127,7 +127,7 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
 
 	// Query 2 - Computer System information.
 	err = func() error {
-		resultRaw, err := oleutil.CallMethod(service, "ExecQuery", "SELECT AutomaticManagedPagefile, Manufacturer, Model, TotalPhysicalMemory FROM Win32_ComputerSystem")
+		resultRaw, err := oleutil.CallMethod(service, "ExecQuery", "SELECT AutomaticManagedPagefile, Manufacturer, Model, TotalPhysicalMemory, SystemFamily FROM Win32_ComputerSystem")
 		if err != nil {
 			return fmt.Errorf("Unable to execute query while getting Computer System info. %s", err.Error())
 		}
@@ -169,6 +169,11 @@ func GetSystemProfile() (so.Hardware, so.OperatingSystem, so.Memory, []so.Disk, 
 				return fmt.Errorf("Error while getting property Model in Computer System info. %s", err.Error())
 			}
 			retHW.Model = resModel.ToString()
+			resSystemFamily, err := oleutil.GetProperty(item, "SystemFamily")
+			if err != nil {
+				return fmt.Errorf("Error while getting property SystemFamily in Computer System info. %s", err.Error())
+			}
+			retHW.SystemFamily = resSystemFamily.ToString()
 			resTM, err := oleutil.GetProperty(item, "TotalPhysicalMemory")
 			if err != nil {
 				return fmt.Errorf("Error while getting property TotalPhysicalMemory in Computer System info. %s", err.Error())

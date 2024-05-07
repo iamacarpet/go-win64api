@@ -8,6 +8,7 @@ type Hardware struct {
 	HardwareUUID      string       `json:"HardwareUUID"`
 	Manufacturer      string       `json:"Manufacturer"`
 	Model             string       `json:"Model"`
+	SystemFamily      string       `json:"SystemFamily"`
 	ServiceTag        string       `json:"ServiceTag"`
 	BIOSVersion       string       `json:"biosVersion"`
 	BIOSManufacturer  string       `json:"biosManufacturer"`
