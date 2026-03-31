@@ -1,3 +1,6 @@
+//go:build windows && amd64
+// +build windows,amd64
+
 package winapi
 
 // WARNING!!! This test have to be run in elevated shell.
